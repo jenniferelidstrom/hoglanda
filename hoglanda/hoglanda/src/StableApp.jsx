@@ -1071,7 +1071,7 @@ function ExportTab({ stroLog, hoLog, isMobile }) {
   )
 }
 
-// ══ SETTINGS TAB ══════════════════════════════════════════
+// ══ SETTINGS TAB ══════════════════════════════════════════ 
 function SettingsTab({ riderConfig, setRiderConfig, horseNames, isMobile }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
