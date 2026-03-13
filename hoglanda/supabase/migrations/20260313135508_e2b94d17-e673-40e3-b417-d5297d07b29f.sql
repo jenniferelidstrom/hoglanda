@@ -1,0 +1,1 @@
+ALTER TABLE public.ho_log ADD COLUMN horse TEXT;

@@ -1,0 +1,1 @@
+ALTER TABLE public.stro_log ADD COLUMN horse TEXT;
