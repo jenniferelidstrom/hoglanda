@@ -844,6 +844,7 @@ export default function StableApp({ session, role, onSignOut }) {
                   </tbody>
                 </table>
               </div>
+            </div>
           </div>
         )}
 
