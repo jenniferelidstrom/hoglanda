@@ -809,41 +809,38 @@ export default function StableApp({ session, role, onSignOut }) {
           <div>
             <SectionTitle icon="🐎" title="Hästaktivitet" sub={isAdmin ? 'Veckans aktiviteter per häst' : 'Skrivskyddat'} />
             <WeekNav info={weekLabel(actMonday)} isNow={actOffset===0} onPrev={() => goActWeek(-1)} onNext={() => goActWeek(1)} />
-            {/* Same table for both mobile and desktop — scrolls horizontally on mobile */}
-            {(
-              <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-                <table style={{ borderCollapse:'collapse', minWidth: isMobile ? 500 : 700 }}>
-                  <thead>
-                    <tr style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', position:'sticky', top:0, zIndex:5 }}>
-                      <th style={{ padding: isMobile ? '7px 8px' : '9px 12px', textAlign:'left', color:C.straw, fontSize: isMobile ? '0.65rem' : '0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', position:'sticky', left:0, background:C.forest, zIndex:6, minWidth: isMobile ? 60 : 85 }}>Häst</th>
-                      {DAGAR.map(d => {
-                        const highlight = actOffset===0 && d===TODAY
-                        return <th key={d} style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', color: highlight ? C.gold : C.straw, borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>{d.slice(0,3)}{highlight?' •':''}</th>
+            <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+              <table style={{ borderCollapse:'collapse', minWidth: isMobile ? 500 : 700 }}>
+                <thead>
+                  <tr style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', position:'sticky', top:0, zIndex:5 }}>
+                    <th style={{ padding: isMobile ? '7px 8px' : '9px 12px', textAlign:'left', color:C.straw, fontSize: isMobile ? '0.65rem' : '0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', position:'sticky', left:0, background:C.forest, zIndex:6, minWidth: isMobile ? 60 : 85 }}>Häst</th>
+                    {DAGAR.map(d => {
+                      const highlight = actOffset===0 && d===TODAY
+                      return <th key={d} style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', color: highlight ? C.gold : C.straw, borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>{d.slice(0,3)}{highlight?' •':''}</th>
+                    })}
+                    <th style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', color:C.straw, fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>Övrigt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {horseNames.map((name, hi) => (
+                    <tr key={hi} style={{ background: hi%2===0 ? '#fff' : C.cream }}>
+                      <td style={{ padding: isMobile ? '4px 6px' : '5px 8px', borderBottom:'1px solid '+C.parchment, borderRight:'1.5px solid '+C.parchment, verticalAlign:'middle', position:'sticky', left:0, background: hi%2===0 ? '#fff' : C.cream, zIndex:4 }}>
+                        <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize: isMobile ? '0.72rem' : '0.82rem', whiteSpace:'nowrap' }}>{name}</span>
+                      </td>
+                      {DAGAR.concat(['Övrigt']).map(dag => {
+                        const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
+                        const highlight = actOffset===0 && dag===TODAY
+                        return (
+                          <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth: isMobile ? 62 : 85 }}>
+                            <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize: isMobile ? '0.62rem' : '0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                            {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
+                          </td>
+                        )
                       })}
-                      <th style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', color:C.straw, fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>Övrigt</th>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {horseNames.map((name, hi) => (
-                      <tr key={hi} style={{ background: hi%2===0 ? '#fff' : C.cream }}>
-                        <td style={{ padding: isMobile ? '4px 6px' : '5px 8px', borderBottom:'1px solid '+C.parchment, borderRight:'1.5px solid '+C.parchment, verticalAlign:'middle', position:'sticky', left:0, background: hi%2===0 ? '#fff' : C.cream, zIndex:4 }}>
-                          <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize: isMobile ? '0.72rem' : '0.82rem', whiteSpace:'nowrap' }}>{name}</span>
-                        </td>
-                        {DAGAR.concat(['Övrigt']).map(dag => {
-                          const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
-                          const highlight = actOffset===0 && dag===TODAY
-                          return (
-                            <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth: isMobile ? 62 : 85 }}>
-                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize: isMobile ? '0.62rem' : '0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                              {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
