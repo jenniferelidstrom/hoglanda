@@ -239,7 +239,9 @@ export default function StableApp({ session, role, onSignOut }) {
 
   // Strö log
   const [stroLog, setStroLog] = useState([])
-  const [sForm, setSForm] = useState({ item:'Stallströ', amount:1, horse:'' })
+  const [sForm, setSForm] = useState({ item:'Stallströ', amount:1, horse:'', date: TODAY_DATE })
+  const [stroMonth, setStroMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [hoMonth, setHoMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [sOk, setSOk] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editData, setEditData] = useState(null)
@@ -405,10 +407,10 @@ export default function StableApp({ session, role, onSignOut }) {
   async function submitStro() {
     if (!sForm.horse) return
     const name = userEmail.split('@')[0]
-    const date = TODAY_DATE
+    const date = sForm.date || TODAY_DATE
     const { data } = await supabase.from('stro_log').insert({ name, item:sForm.item, amount:sForm.amount, date, user_id:userId, horse:sForm.horse }).select().single()
     if (data) setStroLog(p => [{ id:data.id, name:data.name, item:data.item, amount:data.amount, date:data.date, user_id:data.user_id, horse:data.horse||'' }, ...p])
-    setSOk(true); setSForm({ item:'Stallströ', amount:1, horse:'' }); setTimeout(() => setSOk(false), 3000)
+    setSOk(true); setSForm({ item:'Stallströ', amount:1, horse:'', date: TODAY_DATE }); setTimeout(() => setSOk(false), 3000)
   }
   async function saveStroEdit() {
     await supabase.from('stro_log').update({ name:editData.name, item:editData.item, amount:editData.amount, horse:editData.horse||'' }).eq('id', editId)
@@ -440,16 +442,23 @@ export default function StableApp({ session, role, onSignOut }) {
   // ── Tabs ──
   const foderHorses = (userHorses ? horseNames.filter(n => userHorses.includes(n)) : horseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
   const foderLabel = foderHorses.length === 1 ? 'Foderstat' : 'Foderstater'
-  const TABS = [
+
+  // Tabs visible in bottom nav (all users see these)
+  const MAIN_TABS = [
     { id:'schema',    label:'Schema',    icon:'📅' },
-    { id:'stro',      label:'Strö',      icon:'📦' },
+    { id:'stro',      label:'Strö',      icon:'🛍️' },
     { id:'ho',        label:'Hö/Halm',   icon:'🌾' },
-    { id:'foder',     label:foderLabel,   icon:'🍽️' },
-    { id:'aktivitet', label:'Aktivitet', icon:'🐎', adminOnly: true },
-    { id:'settings',  label:'Inst.',     icon:'⚙️', adminOnly: true },
-    { id:'export',    label:'Export',    icon:'📊', adminOnly: true },
+    { id:'foder',     label:foderLabel,  icon:'🍽️' },
     { id:'paddock',   label:'Paddock',   icon:'🏟️' },
-  ].filter(t => !t.adminOnly || isAdmin)
+  ]
+  // Admin-only tabs shown in hamburger menu
+  const MENU_TABS = [
+    { id:'aktivitet', label:'Hästaktivitet', icon:'🐎' },
+    { id:'settings',  label:'Inställningar', icon:'⚙️' },
+    { id:'export',    label:'Export',        icon:'📊' },
+  ]
+  const TABS = isAdmin ? [...MAIN_TABS, ...MENU_TABS] : MAIN_TABS
+  const [menuOpen, setMenuOpen] = useState(false)
 
   if (loadingData) return (
     <div style={{ minHeight:'100vh', background:C.cream, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -596,26 +605,41 @@ export default function StableApp({ session, role, onSignOut }) {
         )}
 
         {/* ══ STRÖ ══ */}
-        {tab === 'stro' && (
+        {tab === 'stro' && (() => {
+          const stroMK = monthKey(stroMonth.year, stroMonth.month)
+          const filteredStro = stroLog.filter(l => l.date && l.date.startsWith(stroMK))
+          const stroTotal = filteredStro.filter(l => l.item === 'Stallströ').reduce((s, l) => s + l.amount, 0)
+          const pelletsTotal = filteredStro.filter(l => l.item === 'Stallpellets').reduce((s, l) => s + l.amount, 0)
+          function goStroMonth(d) {
+            setStroMonth(prev => {
+              let m = prev.month + d, y = prev.year
+              if (m > 11) { m = 0; y++ } else if (m < 0) { m = 11; y-- }
+              return { year: y, month: m }
+            })
+          }
+          return (
           <div>
-            <SectionTitle icon="📦" title="Logga Strö/Pellets" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
-            {/* Totals */}
-            {(() => {
-              const stroTotal = stroLog.filter(l => l.item === 'Stallströ').reduce((s, l) => s + l.amount, 0)
-              const pelletsTotal = stroLog.filter(l => l.item === 'Stallpellets').reduce((s, l) => s + l.amount, 0)
-              return (
-                <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
-                  <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:'0.78rem', color:C.muted }}>🌿 Stallströ:</span>
-                    <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{stroTotal} bal{stroTotal !== 1 ? 'ar' : ''}</span>
-                  </div>
-                  <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:'0.78rem', color:C.muted }}>⚪ Stallpellets:</span>
-                    <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{pelletsTotal} säck{pelletsTotal !== 1 ? 'ar' : ''}</span>
-                  </div>
-                </div>
-              )
-            })()}
+            <SectionTitle icon="🛍️" title="Logga Strö/Pellets" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
+            {/* Month nav */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
+              <button onClick={() => goStroMonth(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>‹</button>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontWeight:'bold', fontSize:'1rem', color:C.bark, fontFamily:'Georgia,serif' }}>{MONTHS_SV[stroMonth.month]} {stroMonth.year}</div>
+                {stroMonth.year===now.getFullYear() && stroMonth.month===now.getMonth() && <div style={{ fontSize:'0.68rem', color:C.moss, fontWeight:'bold' }}>Aktuell månad</div>}
+              </div>
+              <button onClick={() => goStroMonth(1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>›</button>
+            </div>
+            {/* Totals for selected month */}
+            <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
+              <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:'0.78rem', color:C.muted }}>🛍️ Stallströ:</span>
+                <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{stroTotal} bal{stroTotal !== 1 ? 'ar' : ''}</span>
+              </div>
+              <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:'0.78rem', color:C.muted }}>⚪ Stallpellets:</span>
+                <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{pelletsTotal} säck{pelletsTotal !== 1 ? 'ar' : ''}</span>
+              </div>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:16 }}>
               <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 16 : 22, border:'1.5px solid '+C.parchment }}>
                 <h3 style={{ color:C.bark, marginBottom:16, fontSize:'1rem' }}>Logga förbrukning</h3>
@@ -642,13 +666,16 @@ export default function StableApp({ session, role, onSignOut }) {
                     <button onClick={() => setSForm(f => ({ ...f, amount: f.amount+1 }))} style={{ width:46, height:46, borderRadius:9, border:'1.5px solid '+C.parchment, background:C.parchment, fontSize:'1.4rem', cursor:'pointer' }}>+</button>
                   </div>
                 </Field>
+                <Field label="Datum">
+                  <input type="date" value={sForm.date} onChange={e => setSForm(f => ({ ...f, date: e.target.value }))} style={inp} />
+                </Field>
                 {sOk && <div style={{ background:'#e8f5e8', border:'1.5px solid '+C.moss, borderRadius:8, padding:'10px 14px', marginBottom:12, fontSize:'0.9rem', color:C.forest }}>✓ Loggat!</div>}
                 <button onClick={submitStro} style={{ width:'100%', padding:'14px', borderRadius:9, border:'none', background:C.gold, color:C.bark, fontFamily:'Georgia,serif', fontSize:'1rem', fontWeight:'bold', cursor:'pointer' }}>Spara logg</button>
               </div>
               <div>
                 <h3 style={{ color:C.bark, marginBottom:12, fontSize:'1rem' }}>Logghistorik {!isAdmin && <span style={{ fontSize:'0.72rem', color:C.muted, fontWeight:'normal' }}>(bara dina)</span>}</h3>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {stroLog.map(l => (
+                  {filteredStro.map(l => (
                     <div key={l.id} style={{ background: editId===l.id ? '#fffaf0' : '#fff', border:'1.5px solid '+(editId===l.id ? C.gold : C.parchment), borderRadius:10, padding:'13px 14px' }}>
                       {editId===l.id ? (
                         <div>
@@ -689,12 +716,13 @@ export default function StableApp({ session, role, onSignOut }) {
                       )}
                     </div>
                   ))}
-                  {stroLog.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar ännu.</p>}
+                  {filteredStro.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar för {MONTHS_SV[stroMonth.month]}.</p>}
                 </div>
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ══ HÖ/HALM ══ */}
         {tab === 'ho' && (
@@ -708,6 +736,7 @@ export default function StableApp({ session, role, onSignOut }) {
             hoEditData={hoEditData} setHoEditData={setHoEditData}
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo}
             allowedHorses={userHorses}
+            hoMonth={hoMonth} setHoMonth={setHoMonth}
           />
         )}
 
@@ -780,58 +809,32 @@ export default function StableApp({ session, role, onSignOut }) {
           <div>
             <SectionTitle icon="🐎" title="Hästaktivitet" sub={isAdmin ? 'Veckans aktiviteter per häst' : 'Skrivskyddat'} />
             <WeekNav info={weekLabel(actMonday)} isNow={actOffset===0} onPrev={() => goActWeek(-1)} onNext={() => goActWeek(1)} />
-            {isMobile ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {horseNames.map((name, hi) => (
-                  <div key={hi} style={{ background:'#fff', borderRadius:12, overflow:'hidden', border:'1.5px solid '+C.parchment }}>
-                    <div style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', padding:'9px 14px' }}>
-                      <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.straw, fontSize:'1rem' }}>{name}</span>
-                    </div>
-                    <div style={{ padding:'10px', display:'flex', flexDirection:'column', gap:6 }}>
-                      {DAGAR.map(dag => {
-                        const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
-                        const isToday = actOffset===0 && dag===TODAY
-                        return (
-                          <div key={dag} style={{ border:'1px solid '+(isToday ? C.moss : C.parchment), borderRadius:8, overflow:'hidden', background: isToday ? '#f5fbf5' : '#fafafa' }}>
-                            <div style={{ padding:'4px 10px', background: isToday ? '#e8f5e8' : C.parchment, fontSize:'0.72rem', fontWeight:'bold', color: isToday ? C.moss : C.bark, textTransform:'uppercase' }}>
-                              {dag}{isToday ? ' •' : ''}
-                            </div>
-                            <div style={{ padding:'6px 8px' }}>
-                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'2px 4px', fontSize:'0.85rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                              <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ overflowX:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
+            {/* Same table for both mobile and desktop — scrolls horizontally on mobile */}
+            {(
+              <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+                <table style={{ borderCollapse:'collapse', minWidth: isMobile ? 500 : 700 }}>
                   <thead>
-                    <tr style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')' }}>
-                      <th style={{ padding:'9px 12px', textAlign:'left', color:C.straw, fontSize:'0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', width:85 }}>Häst</th>
+                    <tr style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', position:'sticky', top:0, zIndex:5 }}>
+                      <th style={{ padding: isMobile ? '7px 8px' : '9px 12px', textAlign:'left', color:C.straw, fontSize: isMobile ? '0.65rem' : '0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', position:'sticky', left:0, background:C.forest, zIndex:6, minWidth: isMobile ? 60 : 85 }}>Häst</th>
                       {DAGAR.map(d => {
                         const highlight = actOffset===0 && d===TODAY
-                        return <th key={d} style={{ padding:'9px 6px', textAlign:'center', fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', color: highlight ? C.gold : C.straw, borderLeft:'1px solid rgba(255,255,255,0.1)' }}>{d.slice(0,3)}{highlight?' •':''}</th>
+                        return <th key={d} style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', color: highlight ? C.gold : C.straw, borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>{d.slice(0,3)}{highlight?' •':''}</th>
                       })}
-                      <th style={{ padding:'9px 6px', textAlign:'center', color:C.straw, fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', borderLeft:'1px solid rgba(255,255,255,0.1)' }}>Övrigt</th>
+                      <th style={{ padding: isMobile ? '7px 4px' : '9px 6px', textAlign:'center', color:C.straw, fontSize: isMobile ? '0.6rem' : '0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.03em', borderLeft:'1px solid rgba(255,255,255,0.1)', minWidth: isMobile ? 62 : 85 }}>Övrigt</th>
                     </tr>
                   </thead>
                   <tbody>
                     {horseNames.map((name, hi) => (
                       <tr key={hi} style={{ background: hi%2===0 ? '#fff' : C.cream }}>
-                        <td style={{ padding:'5px 8px', borderBottom:'1px solid '+C.parchment, verticalAlign:'top', paddingTop:9 }}>
-                          <input value={name} onChange={e => isAdmin && saveHorseNames(horseNames.map((n,j) => j===hi ? e.target.value : n))} readOnly={!isAdmin} style={{ width:'100%', background:'transparent', border:'none', borderBottom:'1px dashed '+C.parchment, outline:'none', fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize:'0.82rem', padding:'2px 0' }} />
+                        <td style={{ padding: isMobile ? '4px 6px' : '5px 8px', borderBottom:'1px solid '+C.parchment, borderRight:'1.5px solid '+C.parchment, verticalAlign:'middle', position:'sticky', left:0, background: hi%2===0 ? '#fff' : C.cream, zIndex:4 }}>
+                          <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize: isMobile ? '0.72rem' : '0.82rem', whiteSpace:'nowrap' }}>{name}</span>
                         </td>
                         {DAGAR.concat(['Övrigt']).map(dag => {
                           const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
                           const highlight = actOffset===0 && dag===TODAY
                           return (
-                            <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth:85 }}>
-                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize:'0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                            <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth: isMobile ? 62 : 85 }}>
+                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize: isMobile ? '0.62rem' : '0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
                               {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
                             </td>
                           )
@@ -841,7 +844,6 @@ export default function StableApp({ session, role, onSignOut }) {
                   </tbody>
                 </table>
               </div>
-            )}
           </div>
         )}
 
@@ -945,15 +947,43 @@ export default function StableApp({ session, role, onSignOut }) {
 
       {/* Mobile bottom nav */}
       {isMobile && (
-        <nav style={{ position:'fixed', bottom:0, left:0, right:0, background:'linear-gradient(to top,'+C.forest+','+C.moss+')', display:'flex', borderTop:'2px solid rgba(200,169,110,0.25)', zIndex:30, boxShadow:'0 -4px 20px rgba(0,0,0,0.25)', paddingBottom:'env(safe-area-inset-bottom)' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: tab===t.id ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
-              <span style={{ fontSize:'1.2rem', lineHeight:1 }}>{t.icon}</span>
-              <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: tab===t.id ? 'bold' : 'normal', marginTop:1 }}>{t.label}</span>
-              {tab===t.id && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
-            </button>
-          ))}
-        </nav>
+        <>
+          {/* Hamburger menu overlay */}
+          {menuOpen && (
+            <div style={{ position:'fixed', inset:0, zIndex:40 }} onClick={() => setMenuOpen(false)}>
+              <div style={{ position:'absolute', bottom: 72, right: 0, background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', borderRadius:'12px 12px 0 0', padding:'8px 0', minWidth:220, boxShadow:'0 -4px 24px rgba(0,0,0,0.3)', border:'1px solid rgba(200,169,110,0.2)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding:'8px 16px 6px', fontSize:'0.6rem', color:'rgba(200,169,110,0.5)', textTransform:'uppercase', letterSpacing:'0.08em', fontFamily:'Georgia,serif' }}>Navigera</div>
+                {[...MAIN_TABS, ...(isAdmin ? MENU_TABS : [])].map(t => (
+                  <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 18px', background: tab===t.id ? 'rgba(200,169,110,0.15)' : 'transparent', border:'none', cursor:'pointer', fontFamily:'Georgia,serif', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.8)', fontSize:'0.92rem', textAlign:'left', WebkitTapHighlightColor:'transparent' }}>
+                    <span style={{ fontSize:'1.2rem' }}>{t.icon}</span>
+                    <span style={{ fontWeight: tab===t.id ? 'bold' : 'normal' }}>{t.label}</span>
+                    {tab===t.id && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:C.straw }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <nav style={{ position:'fixed', bottom:0, left:0, right:0, background:'linear-gradient(to top,'+C.forest+','+C.moss+')', display:'flex', borderTop:'2px solid rgba(200,169,110,0.25)', zIndex:30, boxShadow:'0 -4px 20px rgba(0,0,0,0.25)', paddingBottom:'env(safe-area-inset-bottom)' }}>
+            {MAIN_TABS.map(t => (
+              <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: tab===t.id ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
+                <span style={{ fontSize:'1.2rem', lineHeight:1 }}>{t.icon}</span>
+                <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: tab===t.id ? 'bold' : 'normal', marginTop:1 }}>{t.label}</span>
+                {tab===t.id && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
+              </button>
+            ))}
+            {/* Hamburger for admin */}
+            {isAdmin && (
+              <button onClick={() => setMenuOpen(o => !o)} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: MENU_TABS.some(t => t.id===tab) ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
+                <span style={{ fontSize:'1.2rem', lineHeight:1, display:'flex', flexDirection:'column', gap:3, justifyContent:'center', height:20 }}>
+                  {[0,1,2].map(i => <span key={i} style={{ display:'block', width:18, height:2, background: MENU_TABS.some(t => t.id===tab) ? C.straw : 'rgba(200,169,110,0.4)', borderRadius:1 }} />)}
+                </span>
+                <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: MENU_TABS.some(t => t.id===tab) ? 'bold' : 'normal', marginTop:1 }}>Mer</span>
+                {MENU_TABS.some(t => t.id===tab) && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
+              </button>
+            )}
+          </nav>
+        </>
       )}
 
       {!isMobile && (
@@ -968,27 +998,42 @@ export default function StableApp({ session, role, onSignOut }) {
 // ══ HÖ/HALM TAB ══════════════════════════════════════════
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
-function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses }) {
+function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, hoMonth, setHoMonth }) {
   const horseList = allowedHorses || HORSES_SORTED
+  const now = new Date()
+  const hoMK = monthKey(hoMonth.year, hoMonth.month)
+  const filteredHo = hoLog.filter(l => l.date && l.date.startsWith(hoMK))
+  function goHoMonth(d) {
+    setHoMonth(prev => {
+      let m = prev.month + d, y = prev.year
+      if (m > 11) { m = 0; y++ } else if (m < 0) { m = 11; y-- }
+      return { year: y, month: m }
+    })
+  }
+  const hoTotal = filteredHo.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0)
+  const halmTotal = filteredHo.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0)
   return (
     <div>
       <SectionTitle icon="🌾" title="Hö & Halm" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
-      {(() => {
-        const hoTotal = hoLog.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0)
-        const halmTotal = hoLog.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0)
-        return (
-          <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
-            <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:'0.78rem', color:C.muted }}>🌾 Hö:</span>
-              <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{hoTotal} kg</span>
-            </div>
-            <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:'0.78rem', color:C.muted }}>🌿 Halm:</span>
-              <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{halmTotal} kg</span>
-            </div>
-          </div>
-        )
-      })()}
+      {/* Month nav */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
+        <button onClick={() => goHoMonth(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>‹</button>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontWeight:'bold', fontSize:'1rem', color:C.bark, fontFamily:'Georgia,serif' }}>{MONTHS_SV[hoMonth.month]} {hoMonth.year}</div>
+          {hoMonth.year===now.getFullYear() && hoMonth.month===now.getMonth() && <div style={{ fontSize:'0.68rem', color:C.moss, fontWeight:'bold' }}>Aktuell månad</div>}
+        </div>
+        <button onClick={() => goHoMonth(1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>›</button>
+      </div>
+      <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
+        <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:'0.78rem', color:C.muted }}>🌾 Hö:</span>
+          <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{hoTotal} kg</span>
+        </div>
+        <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:'0.78rem', color:C.muted }}>🌿 Halm:</span>
+          <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{halmTotal} kg</span>
+        </div>
+      </div>
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:16 }}>
         {/* Form */}
         <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 16 : 22, border:'1.5px solid '+C.parchment }}>
@@ -1040,7 +1085,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
             Logghistorik {!isAdmin && <span style={{ fontSize:'0.72rem', color:C.muted, fontWeight:'normal' }}>(bara dina)</span>}
           </h3>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {hoLog.map(l => (
+            {filteredHo.map(l => (
               <div key={l.id} style={{ background: hoEditId===l.id ? '#fffaf0' : '#fff', border:'1.5px solid '+(hoEditId===l.id ? C.gold : C.parchment), borderRadius:10, padding:'13px 14px' }}>
                 {hoEditId===l.id ? (
                   <div>
@@ -1078,7 +1123,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
                 )}
               </div>
             ))}
-            {hoLog.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar ännu.</p>}
+            {filteredHo.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar för {MONTHS_SV[hoMonth.month]}.</p>}
           </div>
         </div>
       </div>
