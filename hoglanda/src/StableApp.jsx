@@ -252,7 +252,12 @@ export default function StableApp({ session, role, onSignOut }) {
   const [hoOk, setHoOk] = useState(false)
   const [hoEditId, setHoEditId] = useState(null)
   const [hoEditData, setHoEditData] = useState(null)
-  const [userHorses, setUserHorses] = useState(null) // null = no restriction (admin), array = restricted
+  const [userHorses, setUserHorses] = useState(null)
+
+  // Dagbok
+  const [dagbokEntries, setDagbokEntries] = useState([])
+  const [dagbokHorse, setDagbokHorse] = useState('')
+  const [dagbokDate, setDagbokDate] = useState(TODAY_DATE)
 
   // Paddock selection
   const [selection, setSelection] = useState(new Set())
@@ -297,6 +302,13 @@ export default function StableApp({ session, role, onSignOut }) {
       if (uh && uh.length > 0) setUserHorses(uh.map(r => r.horse).sort())
       else setUserHorses(null)
     }
+
+    // Dagbok — load all entries visible to user
+    const dagbokQuery = isAdmin
+      ? supabase.from('dagbok').select('*').order('date', { ascending: false })
+      : supabase.from('dagbok').select('*').eq('user_id', userId).order('date', { ascending: false })
+    const { data: db } = await dagbokQuery
+    if (db) setDagbokEntries(db)
 
     setLoadingData(false)
   }
@@ -436,6 +448,23 @@ export default function StableApp({ session, role, onSignOut }) {
     await supabase.from('ho_log').delete().eq('id', id); setHoLog(p => p.filter(l => l.id !== id))
   }
 
+  // ── Dagbok ──
+  async function saveDagbokEntry(horse, date, vad, kandes, ovrigt) {
+    const existing = dagbokEntries.find(e => e.horse === horse && e.date === date && e.user_id === userId)
+    if (existing) {
+      await supabase.from('dagbok').update({ vad, kandes, ovrigt }).eq('id', existing.id)
+      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, vad, kandes, ovrigt } : e))
+    } else {
+      const name = userEmail.split('@')[0]
+      const { data } = await supabase.from('dagbok').insert({ horse, date, vad, kandes, ovrigt, user_id: userId, name }).select().single()
+      if (data) setDagbokEntries(p => [data, ...p].sort((a,b) => b.date.localeCompare(a.date)))
+    }
+  }
+  async function deleteDagbokEntry(id) {
+    await supabase.from('dagbok').delete().eq('id', id)
+    setDagbokEntries(p => p.filter(e => e.id !== id))
+  }
+
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
@@ -446,14 +475,14 @@ export default function StableApp({ session, role, onSignOut }) {
   // Tabs visible in bottom nav (all users see these)
   const MAIN_TABS = [
     { id:'schema',    label:'Schema',    icon:'📅' },
-    { id:'stro',      label:'Strö',      icon:'🛍️' },
+    { id:'aktivitet', label:'Aktivitet', icon:'🐎' },
+    { id:'paddock',   label:'Paddock',   icon:'🏟️' },
+    { id:'stro',      label:'Strö',      icon:'🟨' },
     { id:'ho',        label:'Hö/Halm',   icon:'🌾' },
     { id:'foder',     label:foderLabel,  icon:'🍽️' },
-    { id:'paddock',   label:'Paddock',   icon:'🏟️' },
+    { id:'dagbok',    label:'Dagbok',    icon:'📓' },
   ]
-  // Admin-only tabs shown in hamburger menu
   const MENU_TABS = [
-    { id:'aktivitet', label:'Hästaktivitet', icon:'🐎' },
     { id:'settings',  label:'Inställningar', icon:'⚙️' },
     { id:'export',    label:'Export',        icon:'📊' },
   ]
@@ -467,12 +496,18 @@ export default function StableApp({ session, role, onSignOut }) {
   )
 
   return (
-    <div style={{ minHeight:'100vh', background:C.cream, fontFamily:'Georgia,serif', paddingBottom: isMobile ? 72 : 0 }}>
+    <div style={{ minHeight:'100vh', background:C.cream, fontFamily:'Georgia,serif' }}>
 
       {/* Header */}
       <header style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', boxShadow:'0 4px 20px rgba(0,0,0,0.2)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ padding: isMobile ? '10px 14px 8px' : '14px 20px 10px', borderBottom:'2px solid rgba(200,169,110,0.4)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            {/* Hamburger — top left, all users */}
+            {isMobile && (
+              <button onClick={() => setMenuOpen(o => !o)} style={{ background:'rgba(255,255,255,0.08)', border:'1px solid rgba(200,169,110,0.25)', borderRadius:8, width:38, height:38, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:5, cursor:'pointer', flexShrink:0, WebkitTapHighlightColor:'transparent' }}>
+                {[0,1,2].map(i => <span key={i} style={{ display:'block', width:18, height:2, background: menuOpen ? C.straw : 'rgba(200,169,110,0.7)', borderRadius:1, transition:'background 0.2s' }} />)}
+              </button>
+            )}
             <span style={{ fontSize: isMobile ? '1.3rem' : '1.6rem' }}>🌿</span>
             <div>
               <h1 style={{ color:C.straw, fontSize: isMobile ? '1rem' : '1.3rem', fontWeight:'bold', margin:0 }}>Höglanda Hästgård</h1>
@@ -485,6 +520,22 @@ export default function StableApp({ session, role, onSignOut }) {
             Logga ut
           </button>
         </div>
+
+        {/* Hamburger dropdown menu — all users */}
+        {isMobile && menuOpen && (
+          <div style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', borderBottom:'2px solid rgba(200,169,110,0.2)', padding:'6px 0' }} onClick={() => setMenuOpen(false)}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:0 }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 16px', background: tab===t.id ? 'rgba(200,169,110,0.12)' : 'transparent', border:'none', borderTop:'1px solid rgba(200,169,110,0.08)', cursor:'pointer', fontFamily:'Georgia,serif', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.75)', fontSize:'0.92rem', textAlign:'left', WebkitTapHighlightColor:'transparent' }}>
+                  <span style={{ fontSize:'1.2rem' }}>{t.icon}</span>
+                  <span style={{ fontWeight: tab===t.id ? 'bold' : 'normal' }}>{t.label}</span>
+                  {tab===t.id && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:C.straw, flexShrink:0 }} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!isMobile && (
           <nav style={{ display:'flex', overflowX:'auto', padding:'0 16px' }}>
             {TABS.map(t => (
@@ -619,7 +670,7 @@ export default function StableApp({ session, role, onSignOut }) {
           }
           return (
           <div>
-            <SectionTitle icon="🛍️" title="Logga Strö/Pellets" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
+            <SectionTitle icon="🟨" title="Logga Strö/Pellets" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
             {/* Month nav */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
               <button onClick={() => goStroMonth(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>‹</button>
@@ -845,6 +896,21 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
+        {/* ══ DAGBOK ══ */}
+        {tab === 'dagbok' && (
+          <DagbokTab
+            isAdmin={isAdmin}
+            isMobile={isMobile}
+            horseNames={userHorses || horseNames}
+            dagbokEntries={dagbokEntries}
+            userId={userId}
+            dagbokHorse={dagbokHorse} setDagbokHorse={setDagbokHorse}
+            dagbokDate={dagbokDate} setDagbokDate={setDagbokDate}
+            saveDagbokEntry={saveDagbokEntry}
+            deleteDagbokEntry={deleteDagbokEntry}
+          />
+        )}
+
         {/* ══ INSTÄLLNINGAR ══ */}
         {tab === 'settings' && isAdmin && (
           <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={horseNames} isMobile={isMobile} />
@@ -942,47 +1008,6 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
       </main>
-
-      {/* Mobile bottom nav */}
-      {isMobile && (
-        <>
-          {/* Hamburger menu overlay */}
-          {menuOpen && (
-            <div style={{ position:'fixed', inset:0, zIndex:40 }} onClick={() => setMenuOpen(false)}>
-              <div style={{ position:'absolute', bottom: 72, right: 0, background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', borderRadius:'12px 12px 0 0', padding:'8px 0', minWidth:220, boxShadow:'0 -4px 24px rgba(0,0,0,0.3)', border:'1px solid rgba(200,169,110,0.2)' }} onClick={e => e.stopPropagation()}>
-                <div style={{ padding:'8px 16px 6px', fontSize:'0.6rem', color:'rgba(200,169,110,0.5)', textTransform:'uppercase', letterSpacing:'0.08em', fontFamily:'Georgia,serif' }}>Navigera</div>
-                {[...MAIN_TABS, ...(isAdmin ? MENU_TABS : [])].map(t => (
-                  <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 18px', background: tab===t.id ? 'rgba(200,169,110,0.15)' : 'transparent', border:'none', cursor:'pointer', fontFamily:'Georgia,serif', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.8)', fontSize:'0.92rem', textAlign:'left', WebkitTapHighlightColor:'transparent' }}>
-                    <span style={{ fontSize:'1.2rem' }}>{t.icon}</span>
-                    <span style={{ fontWeight: tab===t.id ? 'bold' : 'normal' }}>{t.label}</span>
-                    {tab===t.id && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:C.straw }} />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <nav style={{ position:'fixed', bottom:0, left:0, right:0, background:'linear-gradient(to top,'+C.forest+','+C.moss+')', display:'flex', borderTop:'2px solid rgba(200,169,110,0.25)', zIndex:30, boxShadow:'0 -4px 20px rgba(0,0,0,0.25)', paddingBottom:'env(safe-area-inset-bottom)' }}>
-            {MAIN_TABS.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: tab===t.id ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
-                <span style={{ fontSize:'1.2rem', lineHeight:1 }}>{t.icon}</span>
-                <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: tab===t.id ? 'bold' : 'normal', marginTop:1 }}>{t.label}</span>
-                {tab===t.id && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
-              </button>
-            ))}
-            {/* Hamburger for admin */}
-            {isAdmin && (
-              <button onClick={() => setMenuOpen(o => !o)} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: MENU_TABS.some(t => t.id===tab) ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
-                <span style={{ fontSize:'1.2rem', lineHeight:1, display:'flex', flexDirection:'column', gap:3, justifyContent:'center', height:20 }}>
-                  {[0,1,2].map(i => <span key={i} style={{ display:'block', width:18, height:2, background: MENU_TABS.some(t => t.id===tab) ? C.straw : 'rgba(200,169,110,0.4)', borderRadius:1 }} />)}
-                </span>
-                <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: MENU_TABS.some(t => t.id===tab) ? 'bold' : 'normal', marginTop:1 }}>Mer</span>
-                {MENU_TABS.some(t => t.id===tab) && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
-              </button>
-            )}
-          </nav>
-        </>
-      )}
 
       {!isMobile && (
         <footer style={{ textAlign:'center', padding:'20px', color:C.muted, fontSize:'0.72rem', borderTop:'1px solid '+C.parchment, marginTop:20 }}>
@@ -1307,6 +1332,126 @@ function SettingsTab({ riderConfig, setRiderConfig, horseNames, isMobile }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ══ DAGBOK TAB ════════════════════════════════════════════
+function DagbokTab({ isAdmin, isMobile, horseNames, dagbokEntries, userId, dagbokHorse, setDagbokHorse, dagbokDate, setDagbokDate, saveDagbokEntry, deleteDagbokEntry }) {
+  const [vad, setVad] = useState('')
+  const [kandes, setKandes] = useState('')
+  const [ovrigt, setOvrigt] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [viewHorse, setViewHorse] = useState(horseNames[0] || '')
+
+  // Load existing entry when horse+date changes
+  React.useEffect(() => {
+    if (!dagbokHorse || !dagbokDate) return
+    const existing = dagbokEntries.find(e => e.horse === dagbokHorse && e.date === dagbokDate && e.user_id === userId)
+    if (existing) {
+      setVad(existing.vad || '')
+      setKandes(existing.kandes || '')
+      setOvrigt(existing.ovrigt || '')
+    } else {
+      setVad(''); setKandes(''); setOvrigt('')
+    }
+  }, [dagbokHorse, dagbokDate])
+
+  async function handleSave() {
+    if (!dagbokHorse) return
+    await saveDagbokEntry(dagbokHorse, dagbokDate, vad, kandes, ovrigt)
+    setSaved(true); setTimeout(() => setSaved(false), 2500)
+  }
+
+  // Entries for selected horse in view mode, sorted newest first
+  const horseEntries = dagbokEntries
+    .filter(e => e.horse === viewHorse && (isAdmin || e.user_id === userId))
+    .sort((a,b) => b.date.localeCompare(a.date))
+
+  const ta = { width:'100%', padding:'10px 12px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'0.95rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none', resize:'vertical', lineHeight:1.5, minHeight:70 }
+
+  return (
+    <div>
+      <SectionTitle icon="📓" title="Dagbok" sub="Logga ditt pass per häst och datum" />
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20 }}>
+
+        {/* ── Write entry ── */}
+        <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 16 : 22, border:'1.5px solid '+C.parchment }}>
+          <h3 style={{ color:C.bark, marginBottom:16, fontSize:'1rem' }}>Skriv inlägg</h3>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:'0.72rem', color:C.earth, marginBottom:5, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em' }}>Häst</label>
+            <select value={dagbokHorse} onChange={e => setDagbokHorse(e.target.value)} style={{ width:'100%', padding:'11px 13px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none' }}>
+              <option value="">Välj häst...</option>
+              {horseNames.map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:'0.72rem', color:C.earth, marginBottom:5, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em' }}>Datum</label>
+            <input type="date" value={dagbokDate} onChange={e => setDagbokDate(e.target.value)} style={{ width:'100%', padding:'11px 13px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none' }} />
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:'0.72rem', color:C.earth, marginBottom:5, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em' }}>Vad gjorde du?</label>
+            <textarea value={vad} onChange={e => setVad(e.target.value)} placeholder="Beskriv passet..." style={ta} />
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:'0.72rem', color:C.earth, marginBottom:5, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em' }}>Hur kändes det?</label>
+            <textarea value={kandes} onChange={e => setKandes(e.target.value)} placeholder="Hur kändes det för dig och hästen..." style={ta} />
+          </div>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:'block', fontSize:'0.72rem', color:C.earth, marginBottom:5, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em' }}>Övriga kommentarer</label>
+            <textarea value={ovrigt} onChange={e => setOvrigt(e.target.value)} placeholder="Övrigt att notera..." style={ta} />
+          </div>
+          {saved && <div style={{ background:'#e8f5e8', border:'1.5px solid '+C.moss, borderRadius:8, padding:'10px 14px', marginBottom:12, fontSize:'0.9rem', color:C.forest }}>✓ Sparat!</div>}
+          <button onClick={handleSave} disabled={!dagbokHorse} style={{ width:'100%', padding:'14px', borderRadius:9, border:'none', background: dagbokHorse ? C.gold : C.parchment, color: dagbokHorse ? C.bark : C.muted, fontFamily:'Georgia,serif', fontSize:'1rem', fontWeight:'bold', cursor: dagbokHorse ? 'pointer' : 'not-allowed' }}>Spara inlägg</button>
+        </div>
+
+        {/* ── Browse entries ── */}
+        <div>
+          <h3 style={{ color:C.bark, marginBottom:12, fontSize:'1rem' }}>Bläddra i dagboken</h3>
+          <div style={{ marginBottom:12 }}>
+            <select value={viewHorse} onChange={e => setViewHorse(e.target.value)} style={{ width:'100%', padding:'11px 13px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none' }}>
+              <option value="">Välj häst...</option>
+              {horseNames.map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {horseEntries.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga inlägg ännu för {viewHorse || 'vald häst'}.</p>}
+            {horseEntries.map(e => (
+              <div key={e.id} style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, overflow:'hidden' }}>
+                <div style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', padding:'8px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div>
+                    <span style={{ color:C.straw, fontWeight:'bold', fontSize:'0.9rem', fontFamily:'Georgia,serif' }}>{e.date}</span>
+                    <span style={{ color:'rgba(200,169,110,0.6)', fontSize:'0.72rem', marginLeft:10 }}>{e.name}</span>
+                  </div>
+                  {(isAdmin || e.user_id === userId) && (
+                    <button onClick={() => deleteDagbokEntry(e.id)} style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:28, height:28, cursor:'pointer', fontSize:'0.8rem', color:'rgba(200,169,110,0.7)' }}>🗑️</button>
+                  )}
+                </div>
+                <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:10 }}>
+                  {e.vad && (
+                    <div>
+                      <div style={{ fontSize:'0.65rem', color:C.earth, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:3 }}>Vad gjorde du?</div>
+                      <p style={{ fontSize:'0.88rem', color:C.bark, margin:0, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{e.vad}</p>
+                    </div>
+                  )}
+                  {e.kandes && (
+                    <div>
+                      <div style={{ fontSize:'0.65rem', color:C.earth, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:3 }}>Hur kändes det?</div>
+                      <p style={{ fontSize:'0.88rem', color:C.bark, margin:0, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{e.kandes}</p>
+                    </div>
+                  )}
+                  {e.ovrigt && (
+                    <div>
+                      <div style={{ fontSize:'0.65rem', color:C.earth, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:3 }}>Övrigt</div>
+                      <p style={{ fontSize:'0.88rem', color:C.bark, margin:0, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{e.ovrigt}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
