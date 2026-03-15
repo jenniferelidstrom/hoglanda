@@ -607,6 +607,21 @@ export default function StableApp({ session, role, onSignOut }) {
             ))}
           </nav>
         )}
+      {isMobile && menuOpen && (
+          <>
+            <div onClick={() => setMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
+            <div style={{ position:'relative', zIndex:50, background:C.forest, borderBottom:'2px solid rgba(200,169,110,0.3)', padding:'6px 0' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:0 }}>
+                {TABS.map(t => (
+                  <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', background: tab===t.id ? 'rgba(200,169,110,0.15)' : 'none', border:'none', cursor:'pointer', padding:'12px 16px', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.7)', fontSize:'0.88rem', fontFamily:'Georgia,serif', fontWeight: tab===t.id ? 'bold' : 'normal', textAlign:'left', borderTop:'1px solid rgba(200,169,110,0.08)', WebkitTapHighlightColor:'transparent' }}>
+                    <span style={{ fontSize:'1.1rem' }}>{t.icon}</span> {t.label}
+                    {tab===t.id && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:C.straw, flexShrink:0 }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </header>
 
       <main style={{ maxWidth:1200, margin:'0 auto', padding: isMobile ? '14px 12px' : '24px 16px' }}>
