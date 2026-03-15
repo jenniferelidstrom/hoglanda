@@ -593,25 +593,6 @@ export default function StableApp({ session, role, onSignOut }) {
             </div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            {isAdmin && isMobile && (
-              <div style={{ position:'relative' }}>
-                <button onClick={() => setMenuOpen(!menuOpen)} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding:'7px 10px', color:C.straw, cursor:'pointer', fontSize:'1.2rem', lineHeight:1 }}>
-                  ☰
-                </button>
-                {menuOpen && (
-                  <>
-                    <div onClick={() => setMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
-                    <div style={{ position:'absolute', right:0, top:'calc(100% + 6px)', background:C.forest, border:'1.5px solid rgba(200,169,110,0.4)', borderRadius:10, padding:'6px 0', zIndex:50, minWidth:180, boxShadow:'0 8px 30px rgba(0,0,0,0.35)' }}>
-                      {TABS.map(t => (
-                        <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', background: tab===t.id ? 'rgba(200,169,110,0.15)' : 'none', border:'none', cursor:'pointer', padding:'9px 16px', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.7)', fontSize:'0.85rem', fontFamily:'Georgia,serif', fontWeight: tab===t.id ? 'bold' : 'normal', textAlign:'left' }}>
-                          <span>{t.icon}</span> {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
             <button onClick={onSignOut} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding: isMobile ? '7px 11px' : '5px 14px', color:C.straw, cursor:'pointer', fontSize: isMobile ? '0.78rem' : '0.75rem', fontFamily:'Georgia,serif' }}>
               Logga ut
             </button>
@@ -1305,20 +1286,6 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
       </main>
-
-      {/* Mobile bottom nav */}
-      {isMobile && (
-        <nav style={{ position:'fixed', bottom:0, left:0, right:0, background:'linear-gradient(to top,'+C.forest+','+C.moss+')', display:'flex', borderTop:'2px solid rgba(200,169,110,0.25)', zIndex:30, boxShadow:'0 -4px 20px rgba(0,0,0,0.25)', paddingBottom:'env(safe-area-inset-bottom)' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex:1, background:'none', border:'none', cursor:'pointer', padding:'9px 4px 11px', display:'flex', flexDirection:'column', alignItems:'center', gap:2, color: tab===t.id ? C.straw : 'rgba(200,169,110,0.4)', fontFamily:'Georgia,serif', WebkitTapHighlightColor:'transparent' }}>
-              <span style={{ fontSize:'1.2rem', lineHeight:1 }}>{t.icon}</span>
-              <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.03em', fontWeight: tab===t.id ? 'bold' : 'normal', marginTop:1 }}>{t.label}</span>
-              {tab===t.id && <span style={{ width:16, height:2, background:C.straw, borderRadius:1, marginTop:1 }} />}
-            </button>
-          ))}
-        </nav>
-      )}
-
       {!isMobile && (
         <footer style={{ textAlign:'center', padding:'20px', color:C.muted, fontSize:'0.72rem', borderTop:'1px solid '+C.parchment, marginTop:20 }}>
           🌿 Höglanda Hästgård · Stallapp
