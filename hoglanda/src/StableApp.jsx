@@ -239,6 +239,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const userId = session.user.id
   const userEmail = session.user.email
   const [tab, setTab] = useState('schema')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
@@ -323,26 +324,27 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
     })
-    // Strö: admin sees all, inackordering sees only own
+    // Fetch allowed horses for non-admin users (needed before strö/hö queries)
+    let myHorses = []
+    if (!isAdmin) {
+      const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
+      if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
+      else setUserHorses(null)
+    }
+
+    // Strö: admin sees all, inackordering sees entries for their horses
     const stroQuery = isAdmin
       ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
-      : supabase.from('stro_log').select('*').eq('user_id', userId).order('created_at', { ascending: false })
+      : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
     const { data: s } = await stroQuery
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
 
-    // Hö/halm: admin sees all, inackordering sees only own
+    // Hö/halm: admin sees all, inackordering sees entries for their horses
     const hoQuery = isAdmin
       ? supabase.from('ho_log').select('*').order('date', { ascending: false })
-      : supabase.from('ho_log').select('*').eq('user_id', userId).order('date', { ascending: false })
+      : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
     const { data: h } = await hoQuery
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-
-    // Fetch allowed horses for non-admin users
-    if (!isAdmin) {
-      const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
-      if (uh && uh.length > 0) setUserHorses(uh.map(r => r.horse).sort())
-      else setUserHorses(null)
-    }
 
     // Dagbok – fetch entries for all horses user has access to
     if (isAdmin) {
@@ -377,6 +379,11 @@ export default function StableApp({ session, role, onSignOut }) {
     const cur = week[dag]?.[pass] || []
     const next = cur.includes(person) ? cur.filter(x => x !== person) : [...cur, person]
     const ns = { ...allScheds, [schedKey]: { ...week, [dag]: { ...week[dag], [pass]: next } } }
+    setAllScheds(ns); await saveKey('allScheds', ns)
+  }
+  async function updateInslappTid(dag, tid) {
+    const week = allScheds[schedKey] || emptySchedule()
+    const ns = { ...allScheds, [schedKey]: { ...week, [dag]: { ...week[dag], Insläpp_tid: tid } } }
     setAllScheds(ns); await saveKey('allScheds', ns)
   }
 
@@ -582,9 +589,30 @@ export default function StableApp({ session, role, onSignOut }) {
               </p>
             </div>
           </div>
-          <button onClick={onSignOut} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding: isMobile ? '7px 11px' : '5px 14px', color:C.straw, cursor:'pointer', fontSize: isMobile ? '0.78rem' : '0.75rem', fontFamily:'Georgia,serif' }}>
-            Logga ut
-          </button>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            {isAdmin && isMobile && (
+              <div style={{ position:'relative' }}>
+                <button onClick={() => setMenuOpen(!menuOpen)} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding:'7px 10px', color:C.straw, cursor:'pointer', fontSize:'1.2rem', lineHeight:1 }}>
+                  ☰
+                </button>
+                {menuOpen && (
+                  <>
+                    <div onClick={() => setMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
+                    <div style={{ position:'absolute', right:0, top:'calc(100% + 6px)', background:C.forest, border:'1.5px solid rgba(200,169,110,0.4)', borderRadius:10, padding:'6px 0', zIndex:50, minWidth:180, boxShadow:'0 8px 30px rgba(0,0,0,0.35)' }}>
+                      {TABS.map(t => (
+                        <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false) }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', background: tab===t.id ? 'rgba(200,169,110,0.15)' : 'none', border:'none', cursor:'pointer', padding:'9px 16px', color: tab===t.id ? C.straw : 'rgba(200,169,110,0.7)', fontSize:'0.85rem', fontFamily:'Georgia,serif', fontWeight: tab===t.id ? 'bold' : 'normal', textAlign:'left' }}>
+                          <span>{t.icon}</span> {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <button onClick={onSignOut} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding: isMobile ? '7px 11px' : '5px 14px', color:C.straw, cursor:'pointer', fontSize: isMobile ? '0.78rem' : '0.75rem', fontFamily:'Georgia,serif' }}>
+              Logga ut
+            </button>
+          </div>
         </div>
         {!isMobile && (
           <nav style={{ display:'flex', overflowX:'auto', padding:'0 16px' }}>
@@ -605,47 +633,61 @@ export default function StableApp({ session, role, onSignOut }) {
             <SectionTitle icon="📅" title="Veckoschema" sub={isAdmin ? 'Klicka en cell för att välja ansvariga' : 'Skrivskyddat'} />
             <WeekNav info={weekLabel(schedMonday)} isNow={isThisWeek} onPrev={() => goSchedWeek(-1)} onNext={() => goSchedWeek(1)} />
             {isMobile ? (
-              <div>
-                <div style={{ display:'flex', gap:5, marginBottom:12, overflowX:'auto', paddingBottom:2 }}>
-                  {DAGAR.map((d, i) => {
-                    // Only mark today's pill if we're on the current week
-                    const isSel = i === schedDayIdx
-                    const isToday = isThisWeek && d === TODAY
-                    return (
-                      <button key={d} onClick={() => setSchedDayIdx(i)} style={{ flex:'0 0 auto', padding:'7px 12px', borderRadius:20, border:'none', background: isSel ? C.forest : isToday ? '#e8f5e8' : C.parchment, color: isSel ? C.straw : isToday ? C.moss : C.bark, fontFamily:'Georgia,serif', fontWeight: isSel || isToday ? 'bold' : 'normal', fontSize:'0.8rem', cursor:'pointer' }}>
-                        {DAGAR_SHORT[i]}{isToday ? ' •' : ''}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-                  {PASS.map((pass, pi) => {
-                    if (!isAdmin && ADMIN_ONLY_PASS.includes(pass)) return null
-                    const dag = DAGAR[schedDayIdx]; const val = sched[dag]?.[pass] || []
-                    const ck = dag+'|'+pass; const isOpen = openCell === ck
-                    return (
-                      <div key={pass} style={{ background:'#fff', borderRadius:10, border:'1.5px solid '+(val.length ? C.straw : C.parchment), position:'relative' }}>
-                        <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 15px', background:'transparent', border:'none', cursor: isAdmin ? 'pointer' : 'default', fontFamily:'Georgia,serif', outline:'none' }}>
-                          <span style={{ fontSize:'0.9rem', fontWeight:'bold', color:C.bark }}>{PASS_ICONS[pi]} {pass}</span>
-                          <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', maxWidth:'55%' }}>
-                            {val.length === 0 ? <span style={{ fontSize:'0.78rem', color:C.muted, fontStyle:'italic' }}>—</span>
-                              : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:5, padding:'3px 9px', fontSize:'0.75rem', fontWeight:'bold' }}>{p}</span>)}
-                          </div>
-                        </button>
-                        {isOpen && isAdmin && (
-                          <div style={{ position:'absolute', top:'calc(100% + 4px)', right:0, zIndex:50, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:10, padding:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.18)', minWidth:170 }}>
-                            {PERSONER.map(p => (
-                              <label key={p} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 6px', cursor:'pointer', borderRadius:6, fontSize:'0.92rem', color:C.bark, background: val.includes(p) ? '#f0f7ee' : 'transparent' }}>
-                                <input type="checkbox" checked={val.includes(p)} onChange={() => togglePerson(dag, pass, p)} style={{ accentColor:C.moss, width:18, height:18 }} />{p}
-                              </label>
-                            ))}
-                            <button onClick={() => setOpenCell(null)} style={{ marginTop:8, width:'100%', padding:'8px', borderRadius:7, border:'1px solid '+C.parchment, background:C.parchment, fontSize:'0.8rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>Stäng</button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+              <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+                <table style={{ width:'100%', minWidth:700, borderCollapse:'separate', borderSpacing:2, tableLayout:'fixed' }}>
+                  <colgroup>
+                    <col style={{ width:110, position:'sticky', left:0, zIndex:2 }} />
+                    {DAGAR.map(d => <col key={d} />)}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th style={{ position:'sticky', left:0, zIndex:3, background:C.cream }} />
+                      {DAGAR.map((d, i) => {
+                        const highlight = isThisWeek && d === TODAY
+                        return <th key={d} style={{ textAlign:'center', fontSize:'0.6rem', fontWeight:'bold', color: highlight ? C.moss : C.muted, textTransform:'uppercase', letterSpacing:'0.03em', padding:'3px 0', borderBottom: highlight ? '2px solid '+C.moss : '2px solid transparent' }}>{highlight?'• ':''}{DAGAR_SHORT[i]}</th>
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const visiblePasses = PASS.filter(p => isAdmin || !ADMIN_ONLY_PASS.includes(p));
+                      return visiblePasses.map((pass, vi) => {
+                        const pi = PASS.indexOf(pass);
+                        const isBottomRow = vi >= visiblePasses.length - 4;
+                        return (
+                          <tr key={pass}>
+                            <td style={{ fontSize:'0.65rem', fontWeight:'bold', color:C.bark, paddingRight:4, whiteSpace:'nowrap', position:'sticky', left:0, background:C.cream, zIndex:2 }}>{PASS_ICONS[pi]} {pass}</td>
+                            {DAGAR.map(dag => {
+                              const val = sched[dag]?.[pass] || [];
+                              const highlight = isThisWeek && dag === TODAY;
+                              const ck = dag+'|'+pass; const isOpen = openCell===ck;
+                              return (
+                                <td key={dag} style={{ position:'relative', padding:0 }}>
+                                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:1, width:'100%' }}>
+                                    <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', minHeight:28, padding:'2px', borderRadius:5, fontFamily:'Georgia,serif', border:'1.5px solid '+(highlight ? C.moss : val.length ? C.straw : C.parchment), background: highlight ? '#f0f7ee' : val.length ? '#fffaf0' : '#fff', cursor: isAdmin ? 'pointer' : 'default', outline:'none', display:'flex', flexWrap:'wrap', gap:1, alignItems:'center', justifyContent:'center' }}>
+                                      {val.length === 0 ? <span style={{ fontSize:'0.55rem', color:C.muted }}>—</span> : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:3, padding:'1px 4px', fontSize:'0.5rem', fontWeight:'bold' }}>{p}</span>)}
+                                    </button>
+                                    {pass === 'Insläpp' && <input type="time" value={sched[dag]?.Insläpp_tid || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.55rem', padding:'1px 2px', borderRadius:3, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} />}
+                                  </div>
+                                  {isOpen && isAdmin && (
+                                    <div style={{ position:'absolute', [isBottomRow ? 'bottom' : 'top']:'calc(100% + 3px)', left:0, zIndex:50, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:8, padding:'7px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)', minWidth:105 }}>
+                                      {PERSONER.map(p => (
+                                        <label key={p} style={{ display:'flex', alignItems:'center', gap:6, padding:'4px', cursor:'pointer', borderRadius:4, fontSize:'0.75rem', color:C.bark, background: val.includes(p) ? '#f0f7ee' : 'transparent' }}>
+                                          <input type="checkbox" checked={val.includes(p)} onChange={() => togglePerson(dag, pass, p)} style={{ accentColor:C.moss, width:13, height:13 }} />{p}
+                                        </label>
+                                      ))}
+                                      <button onClick={() => setOpenCell(null)} style={{ marginTop:5, width:'100%', padding:'3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.parchment, fontSize:'0.68rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>Stäng</button>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div style={{ overflowX:'auto' }}>
@@ -672,15 +714,19 @@ export default function StableApp({ session, role, onSignOut }) {
                         return (
                           <tr key={pass}>
                             <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{PASS_ICONS[pi]} {pass}</td>
+
                             {DAGAR.map(dag => {
                               const val = sched[dag]?.[pass] || [];
                               const highlight = isThisWeek && dag === TODAY;
                               const ck = dag+'|'+pass; const isOpen = openCell===ck;
                               return (
                                 <td key={dag} style={{ position:'relative', padding:0 }}>
-                                  <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', minHeight:32, padding:'3px', borderRadius:6, fontFamily:'Georgia,serif', border:'1.5px solid '+(highlight ? C.moss : val.length ? C.straw : C.parchment), background: highlight ? '#f0f7ee' : val.length ? '#fffaf0' : '#fff', cursor: isAdmin ? 'pointer' : 'default', outline:'none', display:'flex', flexWrap:'wrap', gap:2, alignItems:'center', justifyContent:'center' }}>
-                                    {val.length === 0 ? <span style={{ fontSize:'0.6rem', color:C.muted }}>—</span> : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:3, padding:'1px 5px', fontSize:'0.58rem', fontWeight:'bold' }}>{p}</span>)}
-                                  </button>
+                                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, width:'100%' }}>
+                                    <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', minHeight:32, padding:'3px', borderRadius:6, fontFamily:'Georgia,serif', border:'1.5px solid '+(highlight ? C.moss : val.length ? C.straw : C.parchment), background: highlight ? '#f0f7ee' : val.length ? '#fffaf0' : '#fff', cursor: isAdmin ? 'pointer' : 'default', outline:'none', display:'flex', flexWrap:'wrap', gap:2, alignItems:'center', justifyContent:'center' }}>
+                                      {val.length === 0 ? <span style={{ fontSize:'0.6rem', color:C.muted }}>—</span> : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:3, padding:'1px 5px', fontSize:'0.58rem', fontWeight:'bold' }}>{p}</span>)}
+                                    </button>
+                                    {pass === 'Insläpp' && <input type="time" value={sched[dag]?.Insläpp_tid || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.6rem', padding:'1px 3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} />}
+                                  </div>
                                   {isOpen && isAdmin && (
                                     <div style={{ position:'absolute', [isBottomRow ? 'bottom' : 'top']:'calc(100% + 3px)', left:0, zIndex:50, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:8, padding:'7px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)', minWidth:105 }}>
                                       {PERSONER.map(p => (
@@ -1045,63 +1091,53 @@ export default function StableApp({ session, role, onSignOut }) {
                   <WeekNav info={weekLabel(dagbokMonday)} isNow={isDagbokThisWeek} onPrev={() => { setDagbokOffset(o => o-1); setDagbokEditDay(null) }} onNext={() => { setDagbokOffset(o => o+1); setDagbokEditDay(null) }} />
 
                   {isMobile ? (
-                    /* ── MOBILE: day pills + single day view ── */
-                    <div>
-                      <div style={{ display:'flex', gap:5, marginBottom:12, overflowX:'auto', paddingBottom:2 }}>
-                        {DAGAR.map((d, i) => {
-                          const isToday = isDagbokThisWeek && d === TODAY
-                          const isSel = i === dagbokDayIdx
-                          const entry = entryByDate[weekDates[i]]
+                    /* ── MOBILE: scrollable full week ── */
+                    <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', paddingBottom:4 }}>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, minmax(120px, 1fr))', gap:6, minWidth:860 }}>
+                        {DAGAR.map((dag, i) => {
+                          const dateStr = weekDates[i]
+                          const entry = entryByDate[dateStr]
+                          const isToday = isDagbokThisWeek && dag === TODAY
+                          const isEditing = dagbokEditDay === i
+                          const dayDate = new Date(dateStr)
                           return (
-                            <button key={d} onClick={() => { setDagbokDayIdx(i); setDagbokEditDay(null) }}
-                              style={{ padding:'7px 12px', borderRadius:20, border: isSel ? '2px solid '+C.moss : '1.5px solid '+C.parchment,
-                                background: isSel ? C.moss : isToday ? '#e8f5e8' : '#fff', color: isSel ? '#fff' : C.bark,
-                                fontFamily:'Georgia,serif', fontSize:'0.78rem', cursor:'pointer', whiteSpace:'nowrap', fontWeight: isSel ? 'bold' : 'normal', position:'relative' }}>
-                              {DAGAR_SHORT[i]}
-                              {entry && <span style={{ position:'absolute', top:-2, right:-2, width:8, height:8, borderRadius:'50%', background:C.gold }} />}
-                            </button>
+                            <div key={i} style={{ background: isToday ? '#f0f7ee' : '#fff', borderRadius:10, border: isToday ? '2px solid '+C.moss : '1.5px solid '+C.parchment, padding:10, minHeight:150, display:'flex', flexDirection:'column' }}>
+                              <div style={{ fontWeight:'bold', fontSize:'0.75rem', color:C.bark, fontFamily:'Georgia,serif', marginBottom:4, textAlign:'center' }}>
+                                {DAGAR_SHORT[i]} {dayDate.getDate()}/{dayDate.getMonth()+1}
+                              </div>
+                              {isEditing ? (
+                                <DagbokForm
+                                  key={dagbokHorse+'|'+dateStr}
+                                  initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
+                                  onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
+                                  isUpdate={!!entry}
+                                  onCancel={() => setDagbokEditDay(null)}
+                                  compact
+                                />
+                              ) : entry ? (
+                                <div style={{ flex:1, fontSize:'0.7rem', color:C.bark }}>
+                                  {entry.vad && <div style={{ marginBottom:3 }}><strong>Vad:</strong> {entry.vad}</div>}
+                                  {entry.kandes && <div style={{ marginBottom:3 }}><strong>Kändes:</strong> {entry.kandes}</div>}
+                                  {entry.ovrigt && <div style={{ marginBottom:3 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
+                                  <div style={{ fontSize:'0.6rem', color:C.muted, marginTop:4 }}>— {entry.name}</div>
+                                  <button onClick={() => setDagbokEditDay(i)}
+                                    style={{ marginTop:4, background:C.parchment, border:'none', borderRadius:6, padding:'3px 8px', fontSize:'0.65rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>
+                                    ✏️ Redigera
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                                  <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.7rem', marginBottom:6 }}>Inget pass</p>
+                                  <button onClick={() => setDagbokEditDay(i)}
+                                    style={{ background:C.gold, border:'none', borderRadius:7, padding:'5px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark, fontWeight:'bold' }}>
+                                    ➕ Skriv
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )
                         })}
                       </div>
-                      {/* Day content */}
-                      {(() => {
-                        const dateStr = weekDates[dagbokDayIdx]
-                        const entry = entryByDate[dateStr]
-                        const isEditing = dagbokEditDay === dagbokDayIdx
-                        const dayDate = new Date(dateStr)
-                        const dayLabel = DAGAR[dagbokDayIdx] + ' ' + dayDate.getDate() + '/' + (dayDate.getMonth()+1)
-                        return (
-                          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1.5px solid '+C.parchment }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                              <h3 style={{ color:C.bark, fontSize:'1rem', margin:0, fontFamily:'Georgia,serif' }}>{dayLabel}</h3>
-                              {!isEditing && (
-                                <button onClick={() => setDagbokEditDay(dagbokDayIdx)}
-                                  style={{ background:C.gold, border:'none', borderRadius:8, padding:'6px 14px', color:C.bark, fontFamily:'Georgia,serif', fontSize:'0.82rem', cursor:'pointer', fontWeight:'bold' }}>
-                                  {entry ? '✏️ Redigera' : '➕ Skriv'}
-                                </button>
-                              )}
-                            </div>
-                            {isEditing ? (
-                              <DagbokForm
-                                key={dagbokHorse+'|'+dateStr}
-                                initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
-                                onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
-                                isUpdate={!!entry}
-                                onCancel={() => setDagbokEditDay(null)}
-                              />
-                            ) : entry ? (
-                              <div>
-                                {entry.vad && <div style={{ fontSize:'0.88rem', color:C.bark, marginBottom:8 }}><strong>Vad gjorde du?</strong><br/>{entry.vad}</div>}
-                                {entry.kandes && <div style={{ fontSize:'0.88rem', color:C.bark, marginBottom:8 }}><strong>Hur kändes det?</strong><br/>{entry.kandes}</div>}
-                                {entry.ovrigt && <div style={{ fontSize:'0.88rem', color:C.bark, marginBottom:8 }}><strong>Övriga kommentarer</strong><br/>{entry.ovrigt}</div>}
-                                <div style={{ fontSize:'0.7rem', color:C.muted, marginTop:8 }}>Senast ändrad av {entry.name}</div>
-                              </div>
-                            ) : (
-                              <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inget pass loggat denna dag.</p>
-                            )}
-                          </div>
-                        )
-                      })()}
                     </div>
                   ) : (
                     /* ── DESKTOP: full week grid ── */
