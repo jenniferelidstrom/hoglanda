@@ -20,7 +20,6 @@ const FODER_COL_LABELS = ['Hö','Kraft','Mash/Blötlagd','Övrig info']
 const MONTHS_SV = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December']
 const MONTHS_SHORT = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
 
-// Hö/halm amounts: 0.25 to 30 kg in 0.25 steps
 const HO_AMOUNTS = []
 for (let kg = 0.25; kg <= 30; kg += 0.25) HO_AMOUNTS.push(Math.round(kg * 100) / 100)
 
@@ -49,7 +48,6 @@ const INITIAL_HORSES = [
 ]
 const ACTIVITY_HORSE_ORDER = ['Hippo','Charina','Calle','Joker','Maggan','Skye','Storm','Lova','Celma','Selma','Spot','Spotty']
 
-// ── Helpers ────────────────────────────────────────────────
 function useIsMobile() {
   const [mobile, setMobile] = useState(window.innerWidth < 640)
   useEffect(() => {
@@ -104,25 +102,21 @@ function emptySchedule() {
 }
 function defaultSchedule() {
   const s = emptySchedule()
-  // Utsläpp
   s['Måndag']['Utsläpp'] = ['Lars','Jennifer']
   s['Tisdag']['Utsläpp'] = ['Lars','Agneta','Linnea']
   s['Onsdag']['Utsläpp'] = ['Lars','Linnea']
   s['Torsdag']['Utsläpp'] = ['Lars','Agneta','Linnea']
   s['Fredag']['Utsläpp'] = ['Lars','Jennifer']
-  // Lunchfodring
   s['Måndag']['Lunchfodring'] = ['Lars']
   s['Tisdag']['Lunchfodring'] = ['Agneta']
   s['Onsdag']['Lunchfodring'] = ['Linnea']
   s['Torsdag']['Lunchfodring'] = ['Agneta']
   s['Fredag']['Lunchfodring'] = ['Lars']
-  // Gå med Stella
   s['Måndag']['Gå med Stella'] = ['Lars']
   s['Tisdag']['Gå med Stella'] = ['Agneta']
   s['Onsdag']['Gå med Stella'] = ['Linnea']
   s['Torsdag']['Gå med Stella'] = ['Agneta']
   s['Fredag']['Gå med Stella'] = ['Lars']
-  // Kvällsfodring alla dagar
   DAGAR.forEach(d => { s[d]['Kvällsfodring'] = ['Agneta','Linnea'] })
   return s
 }
@@ -154,14 +148,12 @@ function getActiveRiders(riderConfig, horseName, dateStr) {
 }
 function fmtKg(v) { return Number.isInteger(v) ? v + ' kg' : v + ' kg' }
 
-// Export helpers
 function exportCSV(rows, filename) {
   const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click()
 }
 
-// ── UI Components ──────────────────────────────────────────
 const inp = { width:'100%', padding:'11px 13px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none' }
 
 function SectionTitle({ icon, title, sub }) {
@@ -232,9 +224,9 @@ function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   )
 }
 
-// ── Main ───────────────────────────────────────────────────
 export default function StableApp({ session, role, onSignOut }) {
   const isAdmin = role === 'admin'
+  const isRyttare = role === 'medryttare'
   const isMobile = useIsMobile()
   const userId = session.user.id
   const userEmail = session.user.email
@@ -243,7 +235,6 @@ export default function StableApp({ session, role, onSignOut }) {
   const [saving, setSaving] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
-  // ── App state ──
   const [horseNames, setHorseNames] = useState(INITIAL_HORSES.map(h => h.name))
   const [riderConfig, setRiderConfig] = useState(buildInitialRiderConfig())
   const [foderState, setFoderState] = useState(() => emptyFoder(INITIAL_HORSES.map(h => h.name)))
@@ -257,7 +248,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const [schedDayIdx, setSchedDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0)
   const schedKey = weekKey(schedMonday)
   const sched = allScheds[schedKey] || defaultSchedule()
-  const isThisWeek = schedKey === thisWeekKey  // ← FIX: only highlight today on current week
+  const isThisWeek = schedKey === thisWeekKey
 
   const [actOffset, setActOffset] = useState(0)
   const actMonday = (() => { const d = new Date(thisMonday); d.setDate(d.getDate() + actOffset*7); return d })()
@@ -271,26 +262,23 @@ export default function StableApp({ session, role, onSignOut }) {
   const curMK = monthKey(paddockMonth.year, paddockMonth.month)
   const paddockGrid = allPaddock[curMK] || {}
 
-  // Strö log
   const [stroLog, setStroLog] = useState([])
   const [sForm, setSForm] = useState({ stroAmount:0, pelletsAmount:0, horse:'' })
   const [sOk, setSOk] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editData, setEditData] = useState(null)
 
-  // Hö/halm log
   const [hoLog, setHoLog] = useState([])
   const [hoForm, setHoForm] = useState({ item:'Hö', amount:1.0, date: TODAY_DATE, horse:'' })
   const [hoOk, setHoOk] = useState(false)
   const [hoEditId, setHoEditId] = useState(null)
   const [hoEditData, setHoEditData] = useState(null)
-  const [userHorses, setUserHorses] = useState(null) // null = no restriction (admin), array = restricted
-  const [stroFilterHorses, setStroFilterHorses] = useState([]) // admin filter
-  const [hoFilterHorses, setHoFilterHorses] = useState([]) // admin filter
-  const [foderFilterHorses, setFoderFilterHorses] = useState([]) // admin filter
-  const [actFilterHorses, setActFilterHorses] = useState([]) // admin filter
+  const [userHorses, setUserHorses] = useState(null)
+  const [stroFilterHorses, setStroFilterHorses] = useState([])
+  const [hoFilterHorses, setHoFilterHorses] = useState([])
+  const [foderFilterHorses, setFoderFilterHorses] = useState([])
+  const [actFilterHorses, setActFilterHorses] = useState([])
 
-  // Dagbok – week-based
   const [dagbokEntries, setDagbokEntries] = useState([])
   const [dagbokHorse, setDagbokHorse] = useState('')
   const [dagbokOffset, setDagbokOffset] = useState(0)
@@ -298,9 +286,8 @@ export default function StableApp({ session, role, onSignOut }) {
   const dagbokWeekKey = weekKey(dagbokMonday)
   const isDagbokThisWeek = dagbokWeekKey === thisWeekKey
   const [dagbokDayIdx, setDagbokDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0)
-  const [dagbokEditDay, setDagbokEditDay] = useState(null) // index of day being edited
+  const [dagbokEditDay, setDagbokEditDay] = useState(null)
 
-  // Paddock selection
   const [selection, setSelection] = useState(new Set())
   const isDragging = useRef(false)
   const dragMode = useRef('add')
@@ -310,7 +297,6 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookName, setBookName] = useState('')
   const [bookType, setBookType] = useState('grön')
 
-  // ── Load ──────────────────────────────────────────────────
   useEffect(() => { loadAllData() }, [])
 
   async function loadAllData() {
@@ -324,38 +310,24 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
     })
-    // Fetch allowed horses for non-admin users (needed before strö/hö queries)
     let myHorses = []
     if (!isAdmin) {
       const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
       if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
       else setUserHorses(null)
     }
-
-    // Strö: admin sees all, inackordering sees entries for their horses
     const stroQuery = isAdmin
       ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
       : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
     const { data: s } = await stroQuery
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-
-    // Hö/halm: admin sees all, inackordering sees entries for their horses
     const hoQuery = isAdmin
       ? supabase.from('ho_log').select('*').order('date', { ascending: false })
       : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
     const { data: h } = await hoQuery
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-
-    // Dagbok – fetch entries for all horses user has access to
-    if (isAdmin) {
-      const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
-      if (db) setDagbokEntries(db)
-    } else {
-      // RLS policy handles filtering by user_horses, just select all
-      const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
-      if (db) setDagbokEntries(db)
-    }
-
+    const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
+    if (db) setDagbokEntries(db)
     setLoadingData(false)
   }
 
@@ -365,7 +337,6 @@ export default function StableApp({ session, role, onSignOut }) {
     setSaving(false)
   }
 
-  // ── Schedule ──
   function goSchedWeek(d) {
     setSchedMonday(prev => {
       const next = new Date(prev); next.setDate(prev.getDate() + d*7)
@@ -387,7 +358,6 @@ export default function StableApp({ session, role, onSignOut }) {
     setAllScheds(ns); await saveKey('allScheds', ns)
   }
 
-  // ── Activity ──
   function goActWeek(d) {
     setActOffset(o => {
       const next = o + d; const nm = new Date(thisMonday); nm.setDate(nm.getDate() + next*7)
@@ -403,14 +373,12 @@ export default function StableApp({ session, role, onSignOut }) {
     setAllActs(ns); await saveKey('allActs', ns)
   }
 
-  // ── Foder ──
   async function updateFoder(horse, meal, col, val) {
     const h = foderState[horse] || {}; const m = h[meal] || { ho:'', kraft:'', mash:'', ovrigt:'' }
     const nf = { ...foderState, [horse]: { ...h, [meal]: { ...m, [col]: val } } }
     setFoderState(nf); await saveKey('foderState', nf)
   }
 
-  // ── Paddock ──
   function goMonth(delta) {
     setPaddockMonth(prev => {
       let m = prev.month + delta, y = prev.year
@@ -440,7 +408,6 @@ export default function StableApp({ session, role, onSignOut }) {
   }
   function onCellMouseEnter(dk, slot) {
     if (!isDragging.current) return
-    // Only allow drag along same row (date) to avoid accidental jumps between dates
     const start = dragStart.current
     if (start && dk !== start.dk) return
     const k = cellKey(dk, slot)
@@ -464,38 +431,27 @@ export default function StableApp({ session, role, onSignOut }) {
     if (!bookName.trim()) return
     const updates = {}
     for (const k of selection) {
-      const [ds, ...sp] = k.split('|')
-      const slot = sp.join('|')
+      const [ds, ...sp] = k.split('|'); const slot = sp.join('|')
       if (canBookDate(ds)) {
         if (!updates[ds]) updates[ds] = {}
         updates[ds][slot] = { name: bookName.trim(), type: bookType, userId }
       }
     }
     const month = { ...(allPaddock[curMK] || {}) }
-    Object.entries(updates).forEach(([ds, slots]) => {
-      month[ds] = { ...(month[ds] || {}), ...slots }
-    })
+    Object.entries(updates).forEach(([ds, slots]) => { month[ds] = { ...(month[ds] || {}), ...slots } })
     const np = { ...allPaddock, [curMK]: month }
-    setAllPaddock(np)
-    await saveKey('allPaddock', np)
-    clearSelection()
+    setAllPaddock(np); await saveKey('allPaddock', np); clearSelection()
   }
   async function deleteMultiBooking() {
     const month = { ...(allPaddock[curMK] || {}) }
     for (const k of selection) {
-      const [ds, ...sp] = k.split('|')
-      const slot = sp.join('|')
-      const day = { ...(month[ds] || {}) }
-      delete day[slot]
-      month[ds] = day
+      const [ds, ...sp] = k.split('|'); const slot = sp.join('|')
+      const day = { ...(month[ds] || {}) }; delete day[slot]; month[ds] = day
     }
     const np = { ...allPaddock, [curMK]: month }
-    setAllPaddock(np)
-    await saveKey('allPaddock', np)
-    clearSelection()
+    setAllPaddock(np); await saveKey('allPaddock', np); clearSelection()
   }
 
-  // ── Strö ──
   async function submitStro() {
     if (!sForm.horse) return
     if (sForm.stroAmount === 0 && sForm.pelletsAmount === 0) return
@@ -513,13 +469,14 @@ export default function StableApp({ session, role, onSignOut }) {
     setStroLog(p => p.map(l => l.id === editId ? { ...l, ...editData } : l)); setEditId(null); setEditData(null)
   }
   async function deleteStro(id) {
-    await supabase.from('stro_log').delete().eq('id', id); setStroLog(p => p.filter(l => l.id !== id))
+    const { error } = await supabase.from('stro_log').delete().eq('id', id)
+    if (error) { alert('Kunde inte ta bort: ' + error.message); return }
+    setStroLog(p => p.filter(l => l.id !== id))
   }
 
-  // ── Hö/halm ──
   async function submitHo() {
     if (!hoForm.amount || !hoForm.horse) return
-    const name = userEmail.split('@')[0]  // use email prefix as name
+    const name = userEmail.split('@')[0]
     const { data } = await supabase.from('ho_log').insert({ name, item:hoForm.item, amount:hoForm.amount, date:hoForm.date, user_id:userId, horse:hoForm.horse }).select().single()
     if (data) setHoLog(p => [{ id:data.id, name:data.name, item:data.item, amount:data.amount, date:data.date, user_id:data.user_id, horse:data.horse||'' }, ...p].sort((a,b) => b.date.localeCompare(a.date)))
     setHoOk(true); setHoForm(f => ({ ...f, amount:1.0, date:TODAY_DATE, horse:'' })); setTimeout(() => setHoOk(false), 3000)
@@ -529,15 +486,15 @@ export default function StableApp({ session, role, onSignOut }) {
     setHoLog(p => p.map(l => l.id === hoEditId ? { ...l, ...hoEditData } : l)); setHoEditId(null); setHoEditData(null)
   }
   async function deleteHo(id) {
-    await supabase.from('ho_log').delete().eq('id', id); setHoLog(p => p.filter(l => l.id !== id))
+    const { error } = await supabase.from('ho_log').delete().eq('id', id)
+    if (error) { alert('Kunde inte ta bort: ' + error.message); return }
+    setHoLog(p => p.filter(l => l.id !== id))
   }
 
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
-  // ── Dagbok ──
   async function saveDagbokEntry(horse, date, vad, kandes, ovrigt) {
-    // One entry per horse per day (shared by all users)
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
     if (existing) {
       await supabase.from('dagbok').update({ vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
@@ -553,20 +510,20 @@ export default function StableApp({ session, role, onSignOut }) {
     setDagbokEntries(p => p.filter(e => e.id !== id))
   }
 
-  // ── Tabs ──
   const foderHorses = (userHorses ? horseNames.filter(n => userHorses.includes(n)) : horseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
   const foderLabel = foderHorses.length === 1 ? 'Foderstat' : 'Foderstater'
   const TABS = [
     { id:'schema',    label:'Schema',      icon:'📅' },
-    { id:'aktivitet', label:'Aktiviteter', icon:'🐎', adminOnly: true },
+    { id:'aktivitet', label:'Aktiviteter', icon:'🐎', notInackordering: true },
     { id:'dagbok',    label:'Dagbok',      icon:'📓' },
     { id:'paddock',   label:'Paddock',     icon:'🏟️' },
     { id:'foder',     label:foderLabel,    icon:'🍽️' },
     { id:'stro',      label:'Strö',        icon:'📦' },
     { id:'ho',        label:'Hö',          icon:'🌾' },
     { id:'settings',  label:'Inställning', icon:'⚙️', adminOnly: true },
-    { id:'export',    label:'Export',       icon:'📊', adminOnly: true },
-  ].filter(t => !t.adminOnly || isAdmin)
+    { id:'export',    label:'Export',      icon:'📊', adminOnly: true },
+  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare))
+
 
   if (loadingData) return (
     <div style={{ minHeight:'100vh', background:C.cream, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -577,7 +534,6 @@ export default function StableApp({ session, role, onSignOut }) {
   return (
     <div style={{ minHeight:'100vh', background:C.cream, fontFamily:'Georgia,serif', paddingBottom: isMobile ? 72 : 0 }}>
 
-      {/* Header */}
       <header style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', boxShadow:'0 4px 20px rgba(0,0,0,0.2)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ padding: isMobile ? '10px 14px 8px' : '14px 20px 10px', borderBottom:'2px solid rgba(200,169,110,0.4)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -588,15 +544,13 @@ export default function StableApp({ session, role, onSignOut }) {
             <div>
               <h1 style={{ color:C.straw, fontSize: isMobile ? '1rem' : '1.3rem', fontWeight:'bold', margin:0 }}>Höglanda Hästgård</h1>
               <p style={{ color:'rgba(200,169,110,0.65)', fontSize:'0.6rem', margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>
-                {isAdmin ? '👑 Admin' : '🐴 Inackordering'}{!isMobile && ' · ' + userEmail}<SaveBadge saving={saving} />
+                {isAdmin ? '👑 Admin' : isRyttare ? '🏇 Medryttare' : '🐴 Inackordering'}{!isMobile && ' · ' + userEmail}<SaveBadge saving={saving} />
               </p>
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <button onClick={onSignOut} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding: isMobile ? '7px 11px' : '5px 14px', color:C.straw, cursor:'pointer', fontSize: isMobile ? '0.78rem' : '0.75rem', fontFamily:'Georgia,serif' }}>
-              Logga ut
-            </button>
-          </div>
+          <button onClick={onSignOut} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding: isMobile ? '7px 11px' : '5px 14px', color:C.straw, cursor:'pointer', fontSize: isMobile ? '0.78rem' : '0.75rem', fontFamily:'Georgia,serif' }}>
+            Logga ut
+          </button>
         </div>
         {!isMobile && (
           <nav style={{ display:'flex', overflowX:'auto', padding:'0 16px' }}>
@@ -607,7 +561,7 @@ export default function StableApp({ session, role, onSignOut }) {
             ))}
           </nav>
         )}
-      {isMobile && menuOpen && (
+        {isMobile && menuOpen && (
           <>
             <div onClick={() => setMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
             <div style={{ position:'relative', zIndex:50, background:C.forest, borderBottom:'2px solid rgba(200,169,110,0.3)', padding:'6px 0' }}>
@@ -626,14 +580,12 @@ export default function StableApp({ session, role, onSignOut }) {
 
       <main style={{ maxWidth:1200, margin:'0 auto', padding: isMobile ? '14px 12px' : '24px 16px' }}>
 
-        {/* ══ VECKOSCHEMA ══ */}
         {tab === 'schema' && (
           <div>
             <SectionTitle icon="📅" title="Veckoschema" sub={isAdmin ? 'Klicka en cell för att välja ansvariga' : 'Skrivskyddat'} />
             <WeekNav info={weekLabel(schedMonday)} isNow={isThisWeek} onPrev={() => goSchedWeek(-1)} onNext={() => goSchedWeek(1)} />
             {isMobile ? (
               <div>
-                {/* Day pills */}
                 <div style={{ display:'flex', gap:5, marginBottom:12, overflowX:'auto', paddingBottom:2 }}>
                   {DAGAR.map((d, i) => {
                     const isSel = i === schedDayIdx
@@ -645,7 +597,6 @@ export default function StableApp({ session, role, onSignOut }) {
                     )
                   })}
                 </div>
-                {/* Pass cards for selected day */}
                 <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
                   {PASS.map((pass, pi) => {
                     if (!isAdmin && ADMIN_ONLY_PASS.includes(pass)) return null
@@ -708,7 +659,6 @@ export default function StableApp({ session, role, onSignOut }) {
                         return (
                           <tr key={pass}>
                             <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{PASS_ICONS[pi]} {pass}</td>
-
                             {DAGAR.map(dag => {
                               const val = sched[dag]?.[pass] || [];
                               const highlight = isThisWeek && dag === TODAY;
@@ -745,11 +695,9 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
-        {/* ══ STRÖ ══ */}
         {tab === 'stro' && (
           <div>
             <SectionTitle icon="📦" title="Logga Strö/Pellets" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
-            {/* Form - always on top */}
             <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 16 : 22, border:'1.5px solid '+C.parchment, marginBottom:16 }}>
               <h3 style={{ color:C.bark, marginBottom:16, fontSize:'1rem' }}>Logga förbrukning</h3>
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
@@ -780,8 +728,6 @@ export default function StableApp({ session, role, onSignOut }) {
               {sOk && <div style={{ background:'#e8f5e8', border:'1.5px solid '+C.moss, borderRadius:8, padding:'10px 14px', marginBottom:12, marginTop:12, fontSize:'0.9rem', color:C.forest }}>✓ Loggat!</div>}
               <button onClick={submitStro} disabled={sForm.stroAmount===0 && sForm.pelletsAmount===0} style={{ width:'100%', padding:'14px', borderRadius:9, border:'none', background: (sForm.stroAmount > 0 || sForm.pelletsAmount > 0) ? C.gold : C.parchment, color:C.bark, fontFamily:'Georgia,serif', fontSize:'1rem', fontWeight:'bold', cursor: (sForm.stroAmount > 0 || sForm.pelletsAmount > 0) ? 'pointer' : 'default', marginTop:12, opacity: (sForm.stroAmount > 0 || sForm.pelletsAmount > 0) ? 1 : 0.5 }}>Spara logg</button>
             </div>
-
-            {/* Admin horse filter */}
             {isAdmin && (
               <div style={{ background:'#fff', borderRadius:12, padding:'14px 18px', border:'1.5px solid '+C.parchment, marginBottom:16 }}>
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
@@ -794,13 +740,10 @@ export default function StableApp({ session, role, onSignOut }) {
                 </div>
               </div>
             )}
-
-            {/* Totals */}
             {(() => {
               const filtered = stroFilterHorses.length > 0 ? stroLog.filter(l => stroFilterHorses.includes(l.horse)) : stroLog
               const stroTotal = filtered.filter(l => l.item === 'Stallströ').reduce((s, l) => s + l.amount, 0)
               const pelletsTotal = filtered.filter(l => l.item === 'Stallpellets').reduce((s, l) => s + l.amount, 0)
-              const displayLog = filtered
               return (
                 <>
                   <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
@@ -813,11 +756,9 @@ export default function StableApp({ session, role, onSignOut }) {
                       <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{pelletsTotal} säck{pelletsTotal !== 1 ? 'ar' : ''}</span>
                     </div>
                   </div>
-
-                  {/* Log history */}
                   <h3 style={{ color:C.bark, marginBottom:12, fontSize:'1rem' }}>Logghistorik {!isAdmin && <span style={{ fontSize:'0.72rem', color:C.muted, fontWeight:'normal' }}>(bara dina)</span>}{isAdmin && stroFilterHorses.length > 0 && <span style={{ fontSize:'0.72rem', color:C.moss, fontWeight:'normal' }}> ({stroFilterHorses.join(', ')})</span>}</h3>
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                    {displayLog.map(l => (
+                    {filtered.map(l => (
                       <div key={l.id} style={{ background: editId===l.id ? '#fffaf0' : '#fff', border:'1.5px solid '+(editId===l.id ? C.gold : C.parchment), borderRadius:10, padding:'13px 14px' }}>
                         {editId===l.id ? (
                           <div>
@@ -857,7 +798,7 @@ export default function StableApp({ session, role, onSignOut }) {
                         )}
                       </div>
                     ))}
-                    {displayLog.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar{stroFilterHorses.length > 0 ? ' för vald häst' : ' ännu'}.</p>}
+                    {filtered.length === 0 && <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga loggar{stroFilterHorses.length > 0 ? ' för vald häst' : ' ännu'}.</p>}
                   </div>
                 </>
               )
@@ -865,23 +806,13 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
-        {/* ══ HÖ/HALM ══ */}
         {tab === 'ho' && (
-          <HoTab
-            isAdmin={isAdmin}
-            isMobile={isMobile}
-            hoLog={hoLog}
-            hoForm={hoForm} setHoForm={setHoForm}
-            hoOk={hoOk}
-            hoEditId={hoEditId} setHoEditId={setHoEditId}
-            hoEditData={hoEditData} setHoEditData={setHoEditData}
-            submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo}
-            allowedHorses={userHorses}
-            filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
-          />
+          <HoTab isAdmin={isAdmin} isMobile={isMobile} hoLog={hoLog} hoForm={hoForm} setHoForm={setHoForm} hoOk={hoOk}
+            hoEditId={hoEditId} setHoEditId={setHoEditId} hoEditData={hoEditData} setHoEditData={setHoEditData}
+            submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
+            filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses} />
         )}
 
-        {/* ══ FODERSTATER ══ */}
         {tab === 'foder' && (
           <div>
             <SectionTitle icon="🍽️" title={foderLabel} sub={isAdmin ? 'Fyll i foderstat per häst' : 'Du ser din hästs foderstat'} />
@@ -907,23 +838,44 @@ export default function StableApp({ session, role, onSignOut }) {
                       <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:'#fff', fontSize:'1rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>{name}</span>
                     </div>
                     {isMobile ? (
-                      <div style={{ padding:12, display:'flex', flexDirection:'column', gap:8 }}>
-                        {FODER_MEALS.map(meal => {
-                          const row = hf[meal] || { ho:'', kraft:'', mash:'', ovrigt:'' }
-                          return (
-                            <div key={meal} style={{ border:'1px solid '+C.parchment, borderRadius:8, overflow:'hidden' }}>
-                              <div style={{ background:C.parchment, padding:'6px 12px', fontSize:'0.78rem', fontWeight:'bold', color:C.bark, textTransform:'uppercase' }}>{meal}</div>
-                              <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:7 }}>
-                                {FODER_COLS.map((col, ci) => (
-                                  <div key={col}>
-                                    <div style={{ fontSize:'0.65rem', color:C.muted, marginBottom:3, textTransform:'uppercase' }}>{FODER_COL_LABELS[ci]}</div>
-                                    <input value={row[col]} onChange={e => canEdit && updateFoder(name, meal, col, e.target.value)} readOnly={!canEdit} placeholder="—" style={{ ...inp, padding:'8px 10px', fontSize:'0.88rem' }} />
-                                  </div>
-                                ))}
+                      <div style={{ padding:'10px 0 12px' }}>
+                        <div style={{ display:'flex', justifyContent:'center', gap:6, marginBottom:8 }} id={'dots-'+name}>
+                          {FODER_MEALS.map((meal, mi) => (
+                            <div key={meal} style={{ width:6, height:6, borderRadius:'50%', background: mi===0 ? C.moss : C.parchment, transition:'background 0.2s' }} />
+                          ))}
+                        </div>
+                        <div
+                          style={{ display:'flex', overflowX:'auto', scrollSnapType:'x mandatory', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', msOverflowStyle:'none' }}
+                          onScroll={e => {
+                            const el = e.target
+                            const idx = Math.round(el.scrollLeft / el.clientWidth)
+                            const dotsEl = document.getElementById('dots-'+name)
+                            if (dotsEl) {
+                              const dots = dotsEl.children
+                              for (let i=0; i<dots.length; i++) dots[i].style.background = i===idx ? '#4a6741' : '#ede6d3'
+                            }
+                          }}
+                        >
+                          {FODER_MEALS.map((meal, mi) => {
+                            const row = hf[meal] || { ho:'', kraft:'', mash:'', ovrigt:'' }
+                            return (
+                              <div key={meal} style={{ flex:'0 0 100%', scrollSnapAlign:'start', padding:'0 12px 4px' }}>
+                                <div style={{ background:C.parchment, padding:'7px 12px', borderRadius:'8px 8px 0 0', fontSize:'0.8rem', fontWeight:'bold', color:C.bark, textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                  <span>{meal}</span>
+                                  <span style={{ fontSize:'0.65rem', color:C.muted, fontWeight:'normal' }}>{mi+1}/{FODER_MEALS.length}</span>
+                                </div>
+                                <div style={{ border:'1.5px solid '+C.parchment, borderTop:'none', borderRadius:'0 0 8px 8px', padding:'10px 12px', display:'flex', flexDirection:'column', gap:10, background:'#fff' }}>
+                                  {FODER_COLS.map((col, ci) => (
+                                    <div key={col}>
+                                      <div style={{ fontSize:'0.65rem', color:C.earth, marginBottom:4, textTransform:'uppercase', fontWeight:'bold', letterSpacing:'0.04em' }}>{FODER_COL_LABELS[ci]}</div>
+                                      <input value={row[col]} onChange={e => canEdit && updateFoder(name, meal, col, e.target.value)} readOnly={!canEdit} placeholder="—" style={{ ...inp, padding:'9px 11px', fontSize:'0.92rem' }} />
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
                       </div>
                     ) : (
                       <table style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -957,7 +909,6 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
-        {/* ══ HÄSTAKTIVITET ══ */}
         {tab === 'aktivitet' && (
           <div>
             <SectionTitle icon="🐎" title="Hästaktivitet" sub={isAdmin ? 'Veckans aktiviteter per häst' : 'Skrivskyddat'} />
@@ -978,96 +929,87 @@ export default function StableApp({ session, role, onSignOut }) {
               const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => horseNames.includes(h))
               const extraHorses = horseNames.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
               const allActivityHorses = [...orderedHorses, ...extraHorses]
-              const displayHorses = actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
+              const displayHorses = isRyttare && userHorses ? allActivityHorses.filter(h => userHorses.includes(h)) : actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
               return isMobile ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {displayHorses.map((name, hi) => (
-                  <div key={hi} style={{ background:'#fff', borderRadius:12, overflow:'hidden', border:'1.5px solid '+C.parchment }}>
-                    <div style={{ background:'#3d1f10', padding:'9px 14px' }}>
-                      <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:'#fff', fontSize:'1rem' }}>{name}</span>
-                    </div>
-                    <div style={{ padding:'10px', display:'flex', flexDirection:'column', gap:6 }}>
-                      {DAGAR.map(dag => {
-                        const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
-                        const isToday = actOffset===0 && dag===TODAY
-                        return (
-                          <div key={dag} style={{ border:'1px solid '+(isToday ? C.moss : C.parchment), borderRadius:8, overflow:'hidden', background: isToday ? '#f5fbf5' : '#fafafa' }}>
-                            <div style={{ padding:'4px 10px', background: isToday ? '#e8f5e8' : C.parchment, fontSize:'0.72rem', fontWeight:'bold', color: isToday ? C.moss : C.bark, textTransform:'uppercase' }}>
-                              {dag}{isToday ? ' •' : ''}
-                            </div>
-                            <div style={{ padding:'6px 8px' }}>
-                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'2px 4px', fontSize:'0.85rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                              <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ overflowX:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
-                  <thead>
-                    <tr style={{ background:'#3d1f10' }}>
-                      <th style={{ padding:'9px 12px', textAlign:'left', color:'#fff', fontSize:'0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', width:85 }}>Häst</th>
-                      {DAGAR.map(d => {
-                        const highlight = actOffset===0 && d===TODAY
-                        return <th key={d} style={{ padding:'9px 6px', textAlign:'center', fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', color: highlight ? C.gold : '#fff', borderLeft:'1px solid rgba(255,255,255,0.12)' }}>{d.slice(0,3)}{highlight?' •':''}</th>
-                      })}
-                      <th style={{ padding:'9px 6px', textAlign:'center', color:'#fff', fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', borderLeft:'1px solid rgba(255,255,255,0.12)' }}>Övrigt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayHorses.map((name, hi) => (
-                      <tr key={hi} style={{ background: hi%2===0 ? '#fff' : C.cream }}>
-                        <td style={{ padding:'5px 8px', borderBottom:'1px solid '+C.parchment, verticalAlign:'top', paddingTop:9 }}>
-                          <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize:'0.82rem' }}>{name}</span>
-                        </td>
-                        {DAGAR.concat(['Övrigt']).map(dag => {
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {displayHorses.map((name, hi) => (
+                    <div key={hi} style={{ background:'#fff', borderRadius:12, overflow:'hidden', border:'1.5px solid '+C.parchment }}>
+                      <div style={{ background:'#3d1f10', padding:'9px 14px' }}>
+                        <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:'#fff', fontSize:'1rem' }}>{name}</span>
+                      </div>
+                      <div style={{ padding:'10px', display:'flex', flexDirection:'column', gap:6 }}>
+                        {DAGAR.map(dag => {
                           const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
-                          const highlight = actOffset===0 && dag===TODAY
+                          const isToday = actOffset===0 && dag===TODAY
                           return (
-                            <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth:85 }}>
-                              <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize:'0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                              {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
-                            </td>
+                            <div key={dag} style={{ border:'1px solid '+(isToday ? C.moss : C.parchment), borderRadius:8, overflow:'hidden', background: isToday ? '#f5fbf5' : '#fafafa' }}>
+                              <div style={{ padding:'4px 10px', background: isToday ? '#e8f5e8' : C.parchment, fontSize:'0.72rem', fontWeight:'bold', color: isToday ? C.moss : C.bark, textTransform:'uppercase' }}>
+                                {dag}{isToday ? ' •' : ''}
+                              </div>
+                              <div style={{ padding:'6px 8px' }}>
+                                <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'2px 4px', fontSize:'0.85rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                                <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />
+                              </div>
+                            </div>
                           )
                         })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
+                    <thead>
+                      <tr style={{ background:'#3d1f10' }}>
+                        <th style={{ padding:'9px 12px', textAlign:'left', color:'#fff', fontSize:'0.7rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', width:85 }}>Häst</th>
+                        {DAGAR.map(d => {
+                          const highlight = actOffset===0 && d===TODAY
+                          return <th key={d} style={{ padding:'9px 6px', textAlign:'center', fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', color: highlight ? C.gold : '#fff', borderLeft:'1px solid rgba(255,255,255,0.12)' }}>{d.slice(0,3)}{highlight?' •':''}</th>
+                        })}
+                        <th style={{ padding:'9px 6px', textAlign:'center', color:'#fff', fontSize:'0.68rem', fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em', borderLeft:'1px solid rgba(255,255,255,0.12)' }}>Övrigt</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
+                    </thead>
+                    <tbody>
+                      {displayHorses.map((name, hi) => (
+                        <tr key={hi} style={{ background: hi%2===0 ? '#fff' : C.cream }}>
+                          <td style={{ padding:'5px 8px', borderBottom:'1px solid '+C.parchment, verticalAlign:'top', paddingTop:9 }}>
+                            <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', color:C.bark, fontSize:'0.82rem' }}>{name}</span>
+                          </td>
+                          {DAGAR.concat(['Övrigt']).map(dag => {
+                            const cell = actGrid[name]?.[dag] || { text:'', ansvarig:'' }
+                            const highlight = actOffset===0 && dag===TODAY
+                            return (
+                              <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth:85 }}>
+                                <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize:'0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                                {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             })()}
           </div>
         )}
 
-
-
-        {/* ══ DAGBOK ══ */}
         {tab === 'dagbok' && (() => {
           const dagbokHorseList = (userHorses || horseNames.slice().sort((a,b) => a.localeCompare(b,'sv')))
           if (!dagbokHorse && dagbokHorseList.length > 0 && dagbokHorseList[0]) {
             setTimeout(() => setDagbokHorse(dagbokHorseList[0]), 0)
           }
-          // Build week dates
           const weekDates = DAGAR.map((_, i) => {
-            const d = new Date(dagbokMonday)
-            d.setDate(dagbokMonday.getDate() + i)
-            return localDateStr(d)
+            const d = new Date(dagbokMonday); d.setDate(dagbokMonday.getDate() + i); return localDateStr(d)
           })
           const entriesForHorse = dagbokEntries.filter(e => e.horse === dagbokHorse)
           const entryByDate = {}
           entriesForHorse.forEach(e => { entryByDate[e.date] = e })
-
           return (
             <div>
               <SectionTitle icon="📓" title="Dagbok" sub="En anteckning per häst och dag – alla kopplade ser samma dagbok" />
-
-              {/* Horse selector pills */}
               <div style={{ display:'flex', gap:6, marginBottom:14, overflowX:'auto', paddingBottom:4 }}>
                 {dagbokHorseList.map(h => (
                   <button key={h} onClick={() => { setDagbokHorse(h); setDagbokEditDay(null) }}
@@ -1078,60 +1020,47 @@ export default function StableApp({ session, role, onSignOut }) {
                   </button>
                 ))}
               </div>
-
               {dagbokHorse && (
                 <>
-                  {/* Week navigation */}
                   <WeekNav info={weekLabel(dagbokMonday)} isNow={isDagbokThisWeek} onPrev={() => { setDagbokOffset(o => o-1); setDagbokEditDay(null) }} onNext={() => { setDagbokOffset(o => o+1); setDagbokEditDay(null) }} />
-
                   {isMobile ? (
-                    /* ── MOBILE: scrollable full week ── */
-                    <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', paddingBottom:4 }}>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, minmax(120px, 1fr))', gap:6, minWidth:860 }}>
-                        {DAGAR.map((dag, i) => {
-                          const dateStr = weekDates[i]
-                          const entry = entryByDate[dateStr]
-                          const isToday = isDagbokThisWeek && dag === TODAY
-                          const isEditing = dagbokEditDay === i
-                          const dayDate = new Date(dateStr)
-                          return (
-                            <div key={i} style={{ background: isToday ? '#f0f7ee' : '#fff', borderRadius:10, border: isToday ? '2px solid '+C.moss : '1.5px solid '+C.parchment, padding:10, minHeight:150, display:'flex', flexDirection:'column' }}>
-                              <div style={{ fontWeight:'bold', fontSize:'0.75rem', color:C.bark, fontFamily:'Georgia,serif', marginBottom:4, textAlign:'center' }}>
-                                {DAGAR_SHORT[i]} {dayDate.getDate()}/{dayDate.getMonth()+1}
-                              </div>
-                              {isEditing ? (
-                                <DagbokForm
-                                  key={dagbokHorse+'|'+dateStr}
-                                  initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
-                                  onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
-                                  isUpdate={!!entry}
-                                  onCancel={() => setDagbokEditDay(null)}
-                                  compact
-                                />
-                              ) : entry ? (
-                                <div style={{ flex:1, fontSize:'0.7rem', color:C.bark }}>
-                                  {entry.vad && <div style={{ marginBottom:3 }}><strong>Vad:</strong> {entry.vad}</div>}
-                                  {entry.kandes && <div style={{ marginBottom:3 }}><strong>Kändes:</strong> {entry.kandes}</div>}
-                                  {entry.ovrigt && <div style={{ marginBottom:3 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
-                                  <div style={{ fontSize:'0.6rem', color:C.muted, marginTop:4 }}>— {entry.name}</div>
-                                  <button onClick={() => setDagbokEditDay(i)}
-                                    style={{ marginTop:4, background:C.parchment, border:'none', borderRadius:6, padding:'3px 8px', fontSize:'0.65rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>
-                                    ✏️ Redigera
-                                  </button>
-                                </div>
-                              ) : (
-                                <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-                                  <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.7rem', marginBottom:6 }}>Inget pass</p>
-                                  <button onClick={() => setDagbokEditDay(i)}
-                                    style={{ background:C.gold, border:'none', borderRadius:7, padding:'5px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark, fontWeight:'bold' }}>
-                                    ➕ Skriv
-                                  </button>
-                                </div>
-                              )}
+                    /* ── MOBILE: vertikal lista nedåt ── */
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {DAGAR.map((dag, i) => {
+                        const dateStr = weekDates[i]
+                        const entry = entryByDate[dateStr]
+                        const isToday = isDagbokThisWeek && dag === TODAY
+                        const isEditing = dagbokEditDay === i
+                        const dayDate = new Date(dateStr)
+                        return (
+                          <div key={i} style={{ background: isToday ? '#f0f7ee' : '#fff', borderRadius:10, border: isToday ? '2px solid '+C.moss : '1.5px solid '+C.parchment, padding:14 }}>
+                            <div style={{ fontWeight:'bold', fontSize:'0.85rem', color: isToday ? C.moss : C.bark, fontFamily:'Georgia,serif', marginBottom:6 }}>
+                              {DAGAR_SHORT[i]} {dayDate.getDate()}/{dayDate.getMonth()+1}{isToday ? ' •' : ''}
                             </div>
-                          )
-                        })}
-                      </div>
+                            {isEditing ? (
+                              <DagbokForm key={dagbokHorse+'|'+dateStr}
+                                initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
+                                onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
+                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact />
+                            ) : entry ? (
+                              <div style={{ fontSize:'0.82rem', color:C.bark }}>
+                                {entry.vad && <div style={{ marginBottom:4 }}><strong>Vad:</strong> {entry.vad}</div>}
+                                {entry.kandes && <div style={{ marginBottom:4 }}><strong>Kändes:</strong> {entry.kandes}</div>}
+                                {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
+                                <div style={{ fontSize:'0.68rem', color:C.muted, marginTop:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                  <span>— {entry.name}</span>
+                                  <button onClick={() => setDagbokEditDay(i)} style={{ background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.72rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                <span style={{ color:C.muted, fontStyle:'italic', fontSize:'0.78rem' }}>Inget pass</span>
+                                <button onClick={() => setDagbokEditDay(i)} style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark, fontWeight:'bold' }}>➕ Skriv</button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     /* ── DESKTOP: full week grid ── */
@@ -1148,32 +1077,22 @@ export default function StableApp({ session, role, onSignOut }) {
                               {DAGAR_SHORT[i]} {dayDate.getDate()}/{dayDate.getMonth()+1}
                             </div>
                             {isEditing ? (
-                              <DagbokForm
-                                key={dagbokHorse+'|'+dateStr}
+                              <DagbokForm key={dagbokHorse+'|'+dateStr}
                                 initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
                                 onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
-                                isUpdate={!!entry}
-                                onCancel={() => setDagbokEditDay(null)}
-                                compact
-                              />
+                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact />
                             ) : entry ? (
                               <div style={{ flex:1, fontSize:'0.75rem', color:C.bark }}>
                                 {entry.vad && <div style={{ marginBottom:4 }}><strong>Vad:</strong> {entry.vad}</div>}
                                 {entry.kandes && <div style={{ marginBottom:4 }}><strong>Kändes:</strong> {entry.kandes}</div>}
                                 {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
                                 <div style={{ fontSize:'0.65rem', color:C.muted, marginTop:6 }}>— {entry.name}</div>
-                                <button onClick={() => setDagbokEditDay(i)}
-                                  style={{ marginTop:6, background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>
-                                  ✏️ Redigera
-                                </button>
+                                <button onClick={() => setDagbokEditDay(i)} style={{ marginTop:6, background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
                               </div>
                             ) : (
                               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
                                 <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.75rem', marginBottom:8 }}>Inget pass</p>
-                                <button onClick={() => setDagbokEditDay(i)}
-                                  style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', fontSize:'0.75rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark, fontWeight:'bold' }}>
-                                  ➕ Skriv
-                                </button>
+                                <button onClick={() => setDagbokEditDay(i)} style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', fontSize:'0.75rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark, fontWeight:'bold' }}>➕ Skriv</button>
                               </div>
                             )}
                           </div>
@@ -1188,17 +1107,14 @@ export default function StableApp({ session, role, onSignOut }) {
           )
         })()}
 
-        {/* ══ INSTÄLLNINGAR ══ */}
         {tab === 'settings' && isAdmin && (
           <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={horseNames} isMobile={isMobile} />
         )}
 
-        {/* ══ EXPORT ══ */}
         {tab === 'export' && isAdmin && (
           <ExportTab stroLog={stroLog} hoLog={hoLog} isMobile={isMobile} userId={userId} />
         )}
 
-        {/* ══ PADDOCK ══ */}
         {tab === 'paddock' && (
           <div>
             <SectionTitle icon="🏟️" title="Paddockbokning" sub={isMobile ? 'Tryck för att markera tidsfält' : 'Klicka och dra – grön = ok att rida bredvid, röd = ensam'} />
@@ -1220,24 +1136,9 @@ export default function StableApp({ session, role, onSignOut }) {
             )}
             <div style={{ overflowX:'auto', borderRadius:10, border:'1.5px solid '+C.parchment, maxHeight: isMobile ? '60vh' : '70vh', overflowY:'auto' }}
               onMouseLeave={onDragEnd} onMouseUp={onDragEnd}
-              onMouseDown={e => {
-                if (isMobile) return
-                const td = e.target.closest('td[data-dk]')
-                if (!td) return
-                onCellMouseDown(e, td.dataset.dk, td.dataset.slot)
-              }}
-              onMouseOver={e => {
-                if (isMobile || !isDragging.current) return
-                const td = e.target.closest('td[data-dk]')
-                if (!td) return
-                onCellMouseEnter(td.dataset.dk, td.dataset.slot)
-              }}
-              onClick={e => {
-                if (!isMobile) return
-                const td = e.target.closest('td[data-dk]')
-                if (!td) return
-                toggleCell(td.dataset.dk, td.dataset.slot)
-              }}
+              onMouseDown={e => { if (isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onCellMouseDown(e, td.dataset.dk, td.dataset.slot) }}
+              onMouseOver={e => { if (isMobile || !isDragging.current) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onCellMouseEnter(td.dataset.dk, td.dataset.slot) }}
+              onClick={e => { if (!isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; toggleCell(td.dataset.dk, td.dataset.slot) }}
             >
               <table style={{ borderCollapse:'collapse', minWidth: 80 + PADDOCK_SLOTS.length * (isMobile ? 44 : 58) }}>
                 <thead>
@@ -1310,7 +1211,6 @@ export default function StableApp({ session, role, onSignOut }) {
   )
 }
 
-// ══ HÖ/HALM TAB ══════════════════════════════════════════
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
 function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses }) {
@@ -1318,12 +1218,9 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
   const filtered = isAdmin && filterHorses.length > 0 ? hoLog.filter(l => filterHorses.includes(l.horse)) : hoLog
   const hoTotal = filtered.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0)
   const halmTotal = filtered.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0)
-
   return (
     <div>
       <SectionTitle icon="🌾" title="Hö & Halm" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
-
-      {/* Form - always on top */}
       <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 16 : 22, border:'1.5px solid '+C.parchment, marginBottom:16 }}>
         <h3 style={{ color:C.bark, marginBottom:16, fontSize:'1rem' }}>Logga förbrukning</h3>
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
@@ -1359,8 +1256,6 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
         {hoOk && <div style={{ background:'#e8f5e8', border:'1.5px solid '+C.moss, borderRadius:8, padding:'10px 14px', marginBottom:12, marginTop:12, fontSize:'0.9rem', color:C.forest }}>✓ Loggat!</div>}
         <button onClick={submitHo} style={{ width:'100%', padding:'14px', borderRadius:9, border:'none', background:C.gold, color:C.bark, fontFamily:'Georgia,serif', fontSize:'1rem', fontWeight:'bold', cursor:'pointer', marginTop:12 }}>Spara</button>
       </div>
-
-      {/* Admin horse filter */}
       {isAdmin && (
         <div style={{ background:'#fff', borderRadius:12, padding:'14px 18px', border:'1.5px solid '+C.parchment, marginBottom:16 }}>
           <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
@@ -1373,8 +1268,6 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           </div>
         </div>
       )}
-
-      {/* Totals */}
       <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:'0.78rem', color:C.muted }}>🌾 Hö:</span>
@@ -1385,8 +1278,6 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{halmTotal} kg</span>
         </div>
       </div>
-
-      {/* Log history */}
       <h3 style={{ color:C.bark, marginBottom:12, fontSize:'1rem' }}>Logghistorik {!isAdmin && <span style={{ fontSize:'0.72rem', color:C.muted, fontWeight:'normal' }}>(bara dina)</span>}{isAdmin && filterHorses.length > 0 && <span style={{ fontSize:'0.72rem', color:C.moss, fontWeight:'normal' }}> ({filterHorses.join(', ')})</span>}</h3>
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {filtered.map(l => (
@@ -1433,7 +1324,6 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
   )
 }
 
-// ══ DAGBOK FORM ═══════════════════════════════════════════
 function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCancel, compact }) {
   const [vad, setVad] = useState(initVad)
   const [kandes, setKandes] = useState(initKandes)
@@ -1441,13 +1331,10 @@ function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCance
   const [saved, setSaved] = useState(false)
   const rows = compact ? 2 : 3
   const fontSize = compact ? '0.78rem' : '1rem'
-
   async function handleSave() {
     await onSave(vad, kandes, ovrigt)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
-
   return (
     <div>
       <Field label="Vad gjorde du?">
@@ -1462,9 +1349,7 @@ function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCance
       {saved && <div style={{ background:'#e8f5e8', border:'1.5px solid '+C.moss, borderRadius:8, padding: compact ? '6px 10px' : '10px 14px', marginBottom:8, fontSize:'0.82rem', color:C.forest }}>✓ Sparat!</div>}
       <div style={{ display:'flex', gap:8 }}>
         {onCancel && (
-          <button onClick={onCancel} style={{ flex:1, padding: compact ? '8px' : '14px', borderRadius:9, border:'1.5px solid '+C.parchment, background:'#fff', color:C.bark, fontFamily:'Georgia,serif', fontSize: compact ? '0.78rem' : '1rem', cursor:'pointer' }}>
-            Avbryt
-          </button>
+          <button onClick={onCancel} style={{ flex:1, padding: compact ? '8px' : '14px', borderRadius:9, border:'1.5px solid '+C.parchment, background:'#fff', color:C.bark, fontFamily:'Georgia,serif', fontSize: compact ? '0.78rem' : '1rem', cursor:'pointer' }}>Avbryt</button>
         )}
         <button onClick={handleSave} style={{ flex:1, padding: compact ? '8px' : '14px', borderRadius:9, border:'none', background:C.gold, color:C.bark, fontFamily:'Georgia,serif', fontSize: compact ? '0.78rem' : '1rem', fontWeight:'bold', cursor:'pointer' }}>
           {isUpdate ? 'Uppdatera' : 'Spara'}
@@ -1474,7 +1359,6 @@ function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCance
   )
 }
 
-// ══ EXPORT TAB ════════════════════════════════════════════
 function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date(); d.setDate(1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
@@ -1482,7 +1366,6 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   const [toDate, setToDate] = useState(TODAY_DATE)
   const [selectedHorse, setSelectedHorse] = useState('')
   const [activeSection, setActiveSection] = useState('export')
-
   const [deliveries, setDeliveries] = useState([])
   const [adjustments, setAdjustments] = useState([])
   const [loadingInv, setLoadingInv] = useState(true)
@@ -1490,7 +1373,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   const [adjustForm, setAdjustForm] = useState({ product:'Stallströ', amount:'', reason:'', date:TODAY_DATE })
   const [showDeliveryForm, setShowDeliveryForm] = useState(false)
   const [showAdjustForm, setShowAdjustForm] = useState(false)
-  const [invMonth, setInvMonth] = useState('all') // 'all' or 'YYYY-MM'
+  const [invMonth, setInvMonth] = useState('all')
 
   const PRODUCTS = [
     { id:'Stallströ', label:'🌿 Stallströ', unit:'balar' },
@@ -1514,23 +1397,15 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   async function submitDelivery() {
     if (!deliveryForm.amount || +deliveryForm.amount <= 0) return
     const prod = PRODUCTS.find(p => p.id === deliveryForm.product)
-    const { data } = await supabase.from('inventory_deliveries').insert({
-      product: deliveryForm.product, amount: +deliveryForm.amount, unit: prod.unit,
-      date: deliveryForm.date, note: deliveryForm.note || null, user_id: userId
-    }).select().single()
+    const { data } = await supabase.from('inventory_deliveries').insert({ product: deliveryForm.product, amount: +deliveryForm.amount, unit: prod.unit, date: deliveryForm.date, note: deliveryForm.note || null, user_id: userId }).select().single()
     if (data) { setDeliveries(p => [data, ...p]); setDeliveryForm({ product:'Stallströ', amount:'', date:TODAY_DATE, note:'' }); setShowDeliveryForm(false) }
   }
-
   async function submitAdjustment() {
     if (!adjustForm.amount || +adjustForm.amount <= 0) return
     const prod = PRODUCTS.find(p => p.id === adjustForm.product)
-    const { data } = await supabase.from('inventory_adjustments').insert({
-      product: adjustForm.product, amount: +adjustForm.amount, unit: prod.unit,
-      reason: adjustForm.reason || null, date: adjustForm.date, user_id: userId
-    }).select().single()
+    const { data } = await supabase.from('inventory_adjustments').insert({ product: adjustForm.product, amount: +adjustForm.amount, unit: prod.unit, reason: adjustForm.reason || null, date: adjustForm.date, user_id: userId }).select().single()
     if (data) { setAdjustments(p => [data, ...p]); setAdjustForm({ product:'Stallströ', amount:'', reason:'', date:TODAY_DATE }); setShowAdjustForm(false) }
   }
-
   async function deleteDelivery(id) { await supabase.from('inventory_deliveries').delete().eq('id', id); setDeliveries(p => p.filter(d => d.id !== id)) }
   async function deleteAdjustment(id) { await supabase.from('inventory_adjustments').delete().eq('id', id); setAdjustments(p => p.filter(a => a.id !== id)) }
 
@@ -1538,7 +1413,6 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
     if (invMonth === 'all') return list
     return list.filter(item => item[dateField] && item[dateField].substring(0,7) === invMonth)
   }
-
   function calcBalance(productId) {
     const totalIn = filterInvByMonth(deliveries).filter(d => d.product === productId).reduce((s, d) => s + +d.amount, 0)
     const usageLogs = productId === 'Hö' || productId === 'Halm' ? hoLog : stroLog
@@ -1553,7 +1427,6 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   stro.forEach(l => { const h = l.horse || 'Okänd'; stroByHorse[h] = stroByHorse[h] || {}; stroByHorse[h][l.item] = (stroByHorse[h][l.item] || 0) + l.amount })
   ho.forEach(l => { const h = l.horse || 'Okänd'; hoByHorse[h] = hoByHorse[h] || {}; hoByHorse[h][l.item] = (hoByHorse[h][l.item] || 0) + l.amount })
   const allHorses = [...new Set([...Object.keys(stroByHorse), ...Object.keys(hoByHorse)])].sort((a,b) => a.localeCompare(b, 'sv'))
-
   const horseDetail = selectedHorse ? [
     ...stro.filter(l => (l.horse||'Okänd') === selectedHorse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit: l.item==='Stallströ' ? 'balar' : 'säckar' })),
     ...ho.filter(l => (l.horse||'Okänd') === selectedHorse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit:'kg' }))
@@ -1585,11 +1458,9 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
       <SectionTitle icon="📊" title="Export & Lager" sub="Förbrukningsexport och lagersaldo" />
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {['export','inventory'].map(id => (
-          <button key={id} onClick={() => setActiveSection(id)} style={{
-            flex:1, padding:'12px 16px', borderRadius:10, border:'2px solid '+(activeSection===id ? C.gold : C.parchment),
-            background: activeSection===id ? '#fdf6d8' : '#fff', fontFamily:'Georgia,serif', fontSize:'0.92rem',
-            fontWeight: activeSection===id ? 'bold' : 'normal', color:C.bark, cursor:'pointer'
-          }}>{id === 'export' ? '📋 Förbrukning & Export' : '📦 Lagersaldo'}</button>
+          <button key={id} onClick={() => setActiveSection(id)} style={{ flex:1, padding:'12px 16px', borderRadius:10, border:'2px solid '+(activeSection===id ? C.gold : C.parchment), background: activeSection===id ? '#fdf6d8' : '#fff', fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight: activeSection===id ? 'bold' : 'normal', color:C.bark, cursor:'pointer' }}>
+            {id === 'export' ? '📋 Förbrukning & Export' : '📦 Lagersaldo'}
+          </button>
         ))}
       </div>
 
@@ -1676,7 +1547,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
       {activeSection === 'inventory' && (<>
         <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 12 : 16, border:'1.5px solid '+C.parchment, marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <button onClick={() => {
-            if (invMonth === 'all') { const d = new Date(); setInvMonth(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')); return }
+            if (invMonth === 'all') { const d = new Date(); setInvMonth(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'00')); return }
             const [y,m] = invMonth.split('-').map(Number); const d = new Date(y, m-2, 1)
             setInvMonth(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'))
           }} style={{ width:40, height:40, borderRadius:10, border:'1.5px solid '+C.parchment, background:C.cream, cursor:'pointer', fontSize:'1.1rem', display:'flex', alignItems:'center', justifyContent:'center', color:C.bark }}>‹</button>
@@ -1795,13 +1666,11 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
           </div>
         )}
       </>)}
-
       <p style={{ color:C.muted, fontSize:'0.75rem', marginTop:10 }}>CSV öppnas direkt i Excel/Numbers. UTF-8 med BOM.</p>
     </div>
   )
 }
 
-// ══ SETTINGS TAB ══════════════════════════════════════════
 function SettingsTab({ riderConfig, setRiderConfig, horseNames, isMobile }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
