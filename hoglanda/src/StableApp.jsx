@@ -178,6 +178,25 @@ function WeekNav({ info, isNow, onPrev, onNext }) {
     </div>
   )
 }
+function MonthNavigator({ month, setMonth }) {
+  function go(delta) {
+    setMonth(prev => {
+      let m = prev.month + delta, y = prev.year
+      if (m < 0) { m = 11; y-- } else if (m > 11) { m = 0; y++ }
+      return { year: y, month: m }
+    })
+  }
+  const isCurrentMonth = month.year === new Date().getFullYear() && month.month === new Date().getMonth()
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, marginBottom:14 }}>
+      <button onClick={() => go(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:38, height:38, cursor:'pointer', fontSize:'1.1rem', fontFamily:'Georgia,serif', color:C.bark }}>◀</button>
+      <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem', fontFamily:'Georgia,serif', minWidth:140, textAlign:'center' }}>{MONTHS_SV[month.month]} {month.year}</span>
+      <button onClick={() => go(1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:38, height:38, cursor:'pointer', fontSize:'1.1rem', fontFamily:'Georgia,serif', color:C.bark }}>▶</button>
+      {!isCurrentMonth && <button onClick={() => setMonth({ year: new Date().getFullYear(), month: new Date().getMonth() })} style={{ padding:'6px 12px', borderRadius:8, border:'1.5px solid '+C.moss, background:'#e8f5e8', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.forest, fontWeight:'bold' }}>Idag</button>}
+    </div>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom:14 }}>
@@ -267,12 +286,14 @@ export default function StableApp({ session, role, onSignOut }) {
   const [sOk, setSOk] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editData, setEditData] = useState(null)
+  const [stroMonth, setStroMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
 
   const [hoLog, setHoLog] = useState([])
   const [hoForm, setHoForm] = useState({ item:'Hö', amount:1.0, date: TODAY_DATE, horse:'' })
   const [hoOk, setHoOk] = useState(false)
   const [hoEditId, setHoEditId] = useState(null)
   const [hoEditData, setHoEditData] = useState(null)
+  const [hoMonth, setHoMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [userHorses, setUserHorses] = useState(null)
   const [stroFilterHorses, setStroFilterHorses] = useState([])
   const [hoFilterHorses, setHoFilterHorses] = useState([])
@@ -740,8 +761,11 @@ export default function StableApp({ session, role, onSignOut }) {
                 </div>
               </div>
             )}
+            <MonthNavigator month={stroMonth} setMonth={setStroMonth} />
             {(() => {
-              const filtered = stroFilterHorses.length > 0 ? stroLog.filter(l => stroFilterHorses.includes(l.horse)) : stroLog
+              const monthPrefix = stroMonth.year + '-' + String(stroMonth.month + 1).padStart(2, '0')
+              const monthFiltered = stroLog.filter(l => l.date && l.date.startsWith(monthPrefix))
+              const filtered = stroFilterHorses.length > 0 ? monthFiltered.filter(l => stroFilterHorses.includes(l.horse)) : monthFiltered
               const stroTotal = filtered.filter(l => l.item === 'Stallströ').reduce((s, l) => s + l.amount, 0)
               const pelletsTotal = filtered.filter(l => l.item === 'Stallpellets').reduce((s, l) => s + l.amount, 0)
               return (
@@ -810,7 +834,8 @@ export default function StableApp({ session, role, onSignOut }) {
           <HoTab isAdmin={isAdmin} isMobile={isMobile} hoLog={hoLog} hoForm={hoForm} setHoForm={setHoForm} hoOk={hoOk}
             hoEditId={hoEditId} setHoEditId={setHoEditId} hoEditData={hoEditData} setHoEditData={setHoEditData}
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
-            filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses} />
+            filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
+            hoMonth={hoMonth} setHoMonth={setHoMonth} />
         )}
 
         {tab === 'foder' && (
@@ -1213,9 +1238,11 @@ export default function StableApp({ session, role, onSignOut }) {
 
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
-function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses }) {
+function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth }) {
   const horseList = allowedHorses || HORSES_SORTED
-  const filtered = isAdmin && filterHorses.length > 0 ? hoLog.filter(l => filterHorses.includes(l.horse)) : hoLog
+  const monthPrefix = hoMonth.year + '-' + String(hoMonth.month + 1).padStart(2, '0')
+  const monthFiltered = hoLog.filter(l => l.date && l.date.startsWith(monthPrefix))
+  const filtered = isAdmin && filterHorses.length > 0 ? monthFiltered.filter(l => filterHorses.includes(l.horse)) : monthFiltered
   const hoTotal = filtered.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0)
   const halmTotal = filtered.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0)
   return (
@@ -1268,6 +1295,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           </div>
         </div>
       )}
+      <MonthNavigator month={hoMonth} setMonth={setHoMonth} />
       <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:'0.78rem', color:C.muted }}>🌾 Hö:</span>
