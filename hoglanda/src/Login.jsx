@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import hoglandaImg from '@/assets/hoglanda.jpg'
+import { supabase } from './supabase.js'
+import hoglandaImg from './assets/hoglanda.jpg'
 
 const C = {
   forest: '#2d4a2d', moss: '#4a6741', straw: '#c8a96e',
@@ -12,25 +13,30 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState<'login' | 'forgot'>('login')
+  const [mode, setMode] = useState('login')
   const [sent, setSent] = useState(false)
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e) {
     e.preventDefault()
     setLoading(true); setError('')
-    // TODO: connect to supabase
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) setError('Fel e-post eller lösenord.')
+    else if (!rememberMe) {
+      window.addEventListener('beforeunload', () => supabase.auth.signOut(), { once: true })
+    }
     setLoading(false)
   }
 
-  async function handleForgot(e: React.FormEvent) {
+  async function handleForgot(e) {
     e.preventDefault()
     setLoading(true); setError('')
-    // TODO: connect to supabase
-    setSent(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+    if (error) setError(error.message)
+    else setSent(true)
     setLoading(false)
   }
 
-  const inp: React.CSSProperties = {
+  const inp = {
     width: '100%', padding: '12px 14px', borderRadius: 8,
     border: '1.5px solid ' + C.parchment, fontSize: '1rem',
     fontFamily: 'Georgia,serif', color: C.bark, background: C.cream, outline: 'none',
