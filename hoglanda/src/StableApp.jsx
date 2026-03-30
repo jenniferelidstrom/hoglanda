@@ -515,14 +515,14 @@ export default function StableApp({ session, role, onSignOut }) {
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
-  async function saveDagbokEntry(horse, date, vad, kandes, ovrigt) {
+  async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
     if (existing) {
-      await supabase.from('dagbok').update({ vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
-      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] } : e))
+      await supabase.from('dagbok').update({ ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
+      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] } : e))
     } else {
       const name = userEmail.split('@')[0]
-      const { data } = await supabase.from('dagbok').insert({ horse, date, vad, kandes, ovrigt, user_id: userId, name }).select().single()
+      const { data } = await supabase.from('dagbok').insert({ horse, date, ryttare, vad, kandes, ovrigt, user_id: userId, name }).select().single()
       if (data) setDagbokEntries(p => [data, ...p].sort((a,b) => b.date.localeCompare(a.date)))
     }
   }
@@ -893,7 +893,7 @@ export default function StableApp({ session, role, onSignOut }) {
                                   {FODER_COLS.map((col, ci) => (
                                     <div key={col}>
                                       <div style={{ fontSize:'0.65rem', color:C.earth, marginBottom:4, textTransform:'uppercase', fontWeight:'bold', letterSpacing:'0.04em' }}>{FODER_COL_LABELS[ci]}</div>
-                                      <input value={row[col]} onChange={e => canEdit && updateFoder(name, meal, col, e.target.value)} readOnly={!canEdit} placeholder="—" style={{ ...inp, padding:'9px 11px', fontSize:'0.92rem' }} />
+                                      <textarea value={row[col]} onChange={e => canEdit && updateFoder(name, meal, col, e.target.value)} readOnly={!canEdit} placeholder="—" rows={2} style={{ ...inp, padding:'9px 11px', fontSize:'0.92rem', resize:'none', lineHeight:1.5, wordBreak:'break-word', overflowWrap:'break-word', minHeight:44 }} />
                                     </div>
                                   ))}
                                 </div>
@@ -1064,11 +1064,13 @@ export default function StableApp({ session, role, onSignOut }) {
                             </div>
                             {isEditing ? (
                               <DagbokForm key={dagbokHorse+'|'+dateStr}
-                                initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
-                                onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
-                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact />
+                                initRyttare={entry?.ryttare||''} initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
+                                onSave={async (ryttare, vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, ryttare, vad, kandes, ovrigt); setDagbokEditDay(null) }}
+                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact
+                                riders={getActiveRiders(riderConfig, dagbokHorse, dateStr)} />
                             ) : entry ? (
                               <div style={{ fontSize:'0.82rem', color:C.bark }}>
+                                {entry.ryttare && <div style={{ marginBottom:4 }}><strong>Ryttare:</strong> {entry.ryttare}</div>}
                                 {entry.vad && <div style={{ marginBottom:4 }}><strong>Vad:</strong> {entry.vad}</div>}
                                 {entry.kandes && <div style={{ marginBottom:4 }}><strong>Kändes:</strong> {entry.kandes}</div>}
                                 {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
@@ -1103,11 +1105,13 @@ export default function StableApp({ session, role, onSignOut }) {
                             </div>
                             {isEditing ? (
                               <DagbokForm key={dagbokHorse+'|'+dateStr}
-                                initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
-                                onSave={async (vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, vad, kandes, ovrigt); setDagbokEditDay(null) }}
-                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact />
+                                initRyttare={entry?.ryttare||''} initVad={entry?.vad||''} initKandes={entry?.kandes||''} initOvrigt={entry?.ovrigt||''}
+                                onSave={async (ryttare, vad, kandes, ovrigt) => { await saveDagbokEntry(dagbokHorse, dateStr, ryttare, vad, kandes, ovrigt); setDagbokEditDay(null) }}
+                                isUpdate={!!entry} onCancel={() => setDagbokEditDay(null)} compact
+                                riders={getActiveRiders(riderConfig, dagbokHorse, dateStr)} />
                             ) : entry ? (
                               <div style={{ flex:1, fontSize:'0.75rem', color:C.bark }}>
+                                {entry.ryttare && <div style={{ marginBottom:4 }}><strong>Ryttare:</strong> {entry.ryttare}</div>}
                                 {entry.vad && <div style={{ marginBottom:4 }}><strong>Vad:</strong> {entry.vad}</div>}
                                 {entry.kandes && <div style={{ marginBottom:4 }}><strong>Kändes:</strong> {entry.kandes}</div>}
                                 {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
@@ -1352,7 +1356,8 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
   )
 }
 
-function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCancel, compact }) {
+function DagbokForm({ initRyttare, initVad, initKandes, initOvrigt, onSave, isUpdate, onCancel, compact, riders }) {
+  const [ryttare, setRyttare] = useState(initRyttare || '')
   const [vad, setVad] = useState(initVad)
   const [kandes, setKandes] = useState(initKandes)
   const [ovrigt, setOvrigt] = useState(initOvrigt)
@@ -1360,11 +1365,17 @@ function DagbokForm({ initVad, initKandes, initOvrigt, onSave, isUpdate, onCance
   const rows = compact ? 2 : 3
   const fontSize = compact ? '0.78rem' : '1rem'
   async function handleSave() {
-    await onSave(vad, kandes, ovrigt)
+    await onSave(ryttare, vad, kandes, ovrigt)
     setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
   return (
     <div>
+      <Field label="Vem red?">
+        <select value={ryttare} onChange={e => setRyttare(e.target.value)} style={{ ...inp, fontSize }}>
+          <option value="">Välj ryttare...</option>
+          {(riders || []).map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </Field>
       <Field label="Vad gjorde du?">
         <textarea value={vad} onChange={e => setVad(e.target.value)} placeholder="Beskriv passet..." rows={rows} style={{ ...inp, resize:'vertical', fontSize }} />
       </Field>
