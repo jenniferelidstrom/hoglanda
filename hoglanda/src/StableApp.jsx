@@ -1457,7 +1457,16 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
     const usageLogs = productId === 'Hö' || productId === 'Halm' ? hoLog : stroLog
     const totalUsed = filterInvByMonth(usageLogs).filter(l => l.item === productId).reduce((s, l) => s + +l.amount, 0)
     const totalAdjusted = filterInvByMonth(adjustments).filter(a => a.product === productId).reduce((s, a) => s + +a.amount, 0)
-    return { totalIn, totalUsed, totalAdjusted, balance: totalIn - totalUsed - totalAdjusted }
+
+    let openingBalance = 0
+    if (invMonth !== 'all') {
+      const prevIn = deliveries.filter(d => d.product === productId && d.date && d.date.substring(0,7) < invMonth).reduce((s, d) => s + +d.amount, 0)
+      const prevUsed = usageLogs.filter(l => l.item === productId && l.date && l.date.substring(0,7) < invMonth).reduce((s, l) => s + +l.amount, 0)
+      const prevAdj = adjustments.filter(a => a.product === productId && a.date && a.date.substring(0,7) < invMonth).reduce((s, a) => s + +a.amount, 0)
+      openingBalance = prevIn - prevUsed - prevAdj
+    }
+
+    return { totalIn, totalUsed, totalAdjusted, openingBalance, balance: openingBalance + totalIn - totalUsed - totalAdjusted }
   }
 
   function filterByDate(log) { return log.filter(l => l.date >= fromDate && l.date <= toDate) }
@@ -1614,6 +1623,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:4 }}>{prod.label}</div>
                 <div style={{ fontSize:'1.8rem', fontWeight:'bold', color: isLow ? '#c62828' : C.bark, marginBottom:8 }}>{bal.balance}<span style={{ fontSize:'0.7rem', fontWeight:'normal', color:C.muted }}> {prod.unit}</span></div>
                 <div style={{ fontSize:'0.7rem', color:C.muted, lineHeight:1.6 }}>
+                  {invMonth !== 'all' && <div>📋 Ingående: <strong style={{ color:C.bark }}>{bal.openingBalance}</strong></div>}
                   <div>📦 Inlevererat: <strong style={{ color:C.moss }}>{bal.totalIn}</strong></div>
                   <div>📉 Förbrukat: <strong style={{ color:C.earth }}>{bal.totalUsed}</strong></div>
                   {bal.totalAdjusted > 0 && <div>❌ Svinn: <strong style={{ color:'#c62828' }}>{bal.totalAdjusted}</strong></div>}
