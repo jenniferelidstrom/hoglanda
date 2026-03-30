@@ -1166,10 +1166,10 @@ export default function StableApp({ session, role, onSignOut }) {
               { icon:'📅', title:'Schema', text:'Här ser du veckoschemat med alla pass (utsläpp, fodring m.m.). Du kan se vem som är ansvarig för varje pass varje dag. Schemat är skrivskyddat för dig – admin hanterar ändringar.' },
               ...(isRyttare ? [{ icon:'🐎', title:'Aktiviteter', text:'Planera veckans ridaktiviteter för varje häst. Skriv vad som ska göras (t.ex. "Dressyr", "Hoppning") och vem som är ansvarig. Bra för att koordinera ridningen.' }] : []),
               { icon:'📓', title:'Dagbok', text:'Skriv dagboksanteckningar om dina hästar – hur de mådde, om du märkt något speciellt, eller bara vad ni gjorde. Välj häst och datum, så sparas allt automatiskt.' },
-              { icon:'🏟️', title:'Paddock', text:'Boka paddocktider för dina hästar. Tryck på ett tidsfält för att markera. Grönt = ok att rida bredvid, rött = vill vara ensam i paddocken. Perfekt för att undvika krockar.' },
-              { icon:'🍽️', title:'Foderstater', text:'Se och redigera foderstater för dina hästar. Här anges hö, kraftfoder, mash och övrig info för varje måltid (morgon, lunch, middag, kväll).' },
+              { icon:'🏟️', title:'Paddock', text:'Boka paddocktider för din häst. Tryck på ett/flera tidsfält för att markera. Grönt = ok att rida bredvid, rött = vill vara ensam i paddocken.' },
+              { icon:'🍽️', title:'Foderstater', text:'Se och redigera foderstater för din häst. Här anges hö, kraftfoder, mash och övrig info för varje måltid (morgon, lunch, middag, kväll).' },
               { icon:'📦', title:'Strö', text:'Logga ströförbrukning för dina hästar. Välj häst, typ av strö, mängd och datum. Du kan se historiken och följa förbrukningen månad för månad.' },
-              { icon:'🌾', title:'Hö', text:'Logga höförbrukning för dina hästar. Ange mängd i kg och datum. Historiken visar förbrukningen och du kan följa den per månad.' },
+              { icon:'🌾', title:'Hö', text:'Logga hö/halmförbrukning för dina hästar. Ange mängd i kg och datum. Historiken visar förbrukningen och du kan följa den per månad.' },
             ].map((item, i) => (
               <div key={i} style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:'16px 20px', marginBottom:10 }}>
                 <h4 style={{ color:C.forest, fontSize:'0.92rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>
@@ -1185,100 +1185,13 @@ export default function StableApp({ session, role, onSignOut }) {
               <ul style={{ color:C.bark, fontSize:'0.84rem', margin:0, paddingLeft:20, lineHeight:1.8 }}>
                 <li>All data sparas automatiskt – du behöver aldrig trycka "Spara".</li>
                 <li>Du ser bara information som rör dina egna hästar.</li>
-                <li>Har du frågor eller problem? Kontakta stallchefen!</li>
+                <li>Har du frågor eller problem? Kontakta Jennifer eller Linnea!</li>
                 <li>Appen fungerar på både mobil och dator.</li>
               </ul>
             </div>
           </div>
         )}
-
-
-          <div>
-            <SectionTitle icon="🏟️" title="Paddockbokning" sub={isMobile ? 'Tryck för att markera tidsfält' : 'Klicka och dra – grön = ok att rida bredvid, röd = ensam'} />
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
-              <button onClick={() => goMonth(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>‹</button>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontWeight:'bold', fontSize:'1rem', color:C.bark, fontFamily:'Georgia,serif' }}>{MONTHS_SV[paddockMonth.month]} {paddockMonth.year}</div>
-                {paddockMonth.year===now.getFullYear() && paddockMonth.month===now.getMonth() && <div style={{ fontSize:'0.68rem', color:C.moss, fontWeight:'bold' }}>Aktuell månad</div>}
-              </div>
-              <button onClick={() => goMonth(1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>›</button>
-            </div>
-            {selection.size > 0 && (
-              <div style={{ display:'flex', alignItems:'center', gap:8, background:C.bark, borderRadius:10, padding:'10px 14px', marginBottom:12, flexWrap:'wrap' }}>
-                <span style={{ color:C.straw, fontSize:'0.85rem', fontWeight:'bold' }}>{selection.size} valda</span>
-                <button onClick={openBookModal} style={{ background: selectionHasUnbookable() ? C.muted : C.moss, color:'#fff', border:'none', borderRadius:7, padding:'8px 14px', cursor:'pointer', fontFamily:'Georgia,serif', fontWeight:'bold', fontSize:'0.85rem' }}>✏️ Boka</button>
-                <button onClick={deleteMultiBooking} style={{ background:'#c62828', color:'#fff', border:'none', borderRadius:7, padding:'8px 14px', cursor:'pointer', fontFamily:'Georgia,serif', fontWeight:'bold', fontSize:'0.85rem' }}>🗑️ Ta bort</button>
-                <button onClick={clearSelection} style={{ background:'transparent', color:C.straw, border:'1px solid rgba(200,169,110,0.4)', borderRadius:7, padding:'8px 12px', cursor:'pointer', fontFamily:'Georgia,serif', fontSize:'0.85rem', marginLeft:'auto' }}>✕</button>
-              </div>
-            )}
-            <div style={{ overflowX:'auto', borderRadius:10, border:'1.5px solid '+C.parchment, maxHeight: isMobile ? '60vh' : '70vh', overflowY:'auto' }}
-              onMouseLeave={onDragEnd} onMouseUp={onDragEnd}
-              onMouseDown={e => { if (isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onCellMouseDown(e, td.dataset.dk, td.dataset.slot) }}
-              onMouseOver={e => { if (isMobile || !isDragging.current) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onCellMouseEnter(td.dataset.dk, td.dataset.slot) }}
-              onClick={e => { if (!isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; toggleCell(td.dataset.dk, td.dataset.slot) }}
-            >
-              <table style={{ borderCollapse:'collapse', minWidth: 80 + PADDOCK_SLOTS.length * (isMobile ? 44 : 58) }}>
-                <thead>
-                  <tr style={{ background:'#3d1f10', position:'sticky', top:0, zIndex:10 }}>
-                    <th style={{ padding:'8px 10px', textAlign:'left', color:'#fff', fontSize:'0.72rem', fontWeight:'bold', textTransform:'uppercase', whiteSpace:'nowrap', position:'sticky', left:0, background:'#3d1f10', zIndex:11, minWidth:isMobile?60:80 }}>Datum</th>
-                    {PADDOCK_SLOTS.map(s => <th key={s} style={{ padding:'5px 2px', textAlign:'center', color:'#fff', fontSize: isMobile ? '0.55rem' : '0.68rem', fontWeight:'bold', borderLeft:'1px solid rgba(255,255,255,0.12)', whiteSpace:'nowrap', minWidth: isMobile ? 44 : 58, lineHeight:1.2 }}><div>{s.split('-')[0]}</div><div style={{ fontSize: isMobile ? '0.5rem' : '0.6rem', fontWeight:'bold' }}>{s.split('-')[1]}</div></th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {getDaysInMonth(paddockMonth.year, paddockMonth.month).map((day, di) => {
-                    const dk = dateKey(day); const isToday = dk === TODAY_DATE; const daySlots = paddockGrid[dk] || {}
-                    return (
-                      <tr key={dk} style={{ background: isToday ? 'rgba(74,103,65,0.07)' : di%2===0 ? '#fff' : C.cream }}>
-                        <td style={{ padding: isMobile ? '4px 6px' : '5px 8px', fontSize: isMobile ? '0.6rem' : '0.72rem', fontWeight: isToday ? 'bold' : 'normal', color: isToday ? C.moss : C.bark, whiteSpace:'nowrap', borderBottom:'1px solid '+C.parchment, position:'sticky', left:0, background: isToday ? '#f0f7ee' : di%2===0 ? '#fff' : C.cream, zIndex:5, borderRight:'1.5px solid '+C.parchment }}>
-                          {day.getDate() + ' ' + MONTHS_SHORT[day.getMonth()]}{!isMobile && ' ' + ['Sön','Mån','Tis','Ons','Tor','Fre','Lör'][day.getDay()]}{isToday ? ' ●' : ''}
-                        </td>
-                        {PADDOCK_SLOTS.map(slot => {
-                          const booking = daySlots[slot]; const ck = cellKey(dk, slot); const isSel = selection.has(ck)
-                          return (
-                            <td key={slot} data-dk={dk} data-slot={slot}
-                              style={{ padding:'2px', borderLeft:'1px solid '+C.parchment, borderBottom:'1px solid '+C.parchment, cursor:'pointer', minWidth: isMobile ? 36 : 48, height: isMobile ? 28 : 30, userSelect:'none', outline: isSel ? '2px solid #1976d2' : 'none', outlineOffset:'-2px', opacity: !canBookDate(dk) && !booking ? 0.4 : 1 }}>
-                              {booking ? (
-                                <div style={{ background: isSel ? (booking.type==='grön' ? '#81c784' : '#e57373') : (booking.type==='grön' ? '#c8e6c9' : '#ffcdd2'), borderRadius:3, height:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 1px', pointerEvents:'none' }}>
-                                  <span style={{ fontSize: isMobile ? '0.45rem' : '0.58rem', fontWeight:'bold', color: booking.type==='grön' ? '#2d6a2d' : '#c62828', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobile ? 32 : 44, pointerEvents:'none' }}>{booking.name}</span>
-                                </div>
-                              ) : (
-                                <div style={{ background: isSel ? 'rgba(25,118,210,0.15)' : 'transparent', borderRadius:3, height:'100%', pointerEvents:'none' }} />
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {bookModal && (
-              <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:100, display:'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent:'center', padding: isMobile ? 0 : 20 }} onClick={() => setBookModal(false)}>
-                <div style={{ background:C.cream, borderRadius: isMobile ? '18px 18px 0 0' : 14, padding: isMobile ? '24px 20px 32px' : 24, maxWidth:380, width:'100%', boxShadow:'0 -8px 40px rgba(0,0,0,0.25)', border:'1.5px solid '+C.straw }} onClick={e => e.stopPropagation()}>
-                  <h3 style={{ color:C.bark, fontFamily:'Georgia,serif', marginBottom:4, fontSize:'1.1rem' }}>Boka {selection.size} tidsfält</h3>
-                  <p style={{ fontSize:'0.78rem', color:C.muted, marginBottom:18 }}>Välj namn och typ.</p>
-                  <Field label="Namn"><input value={bookName} onChange={e => setBookName(e.target.value)} placeholder="Ditt namn..." style={inp} autoFocus /></Field>
-                  <Field label="Typ">
-                    <div style={{ display:'flex', gap:10 }}>
-                      {['grön','röd'].map(t => (
-                        <label key={t} style={{ flex:1, padding:'13px 10px', borderRadius:9, cursor:'pointer', border:'2px solid '+(bookType===t ? (t==='grön' ? '#4a7c41' : '#c62828') : C.parchment), background: bookType===t ? (t==='grön' ? '#e8f5e8' : '#fce8e8') : '#fff', display:'flex', alignItems:'center', justifyContent:'center', gap:6, fontSize:'0.88rem', fontWeight:'bold', color: t==='grön' ? '#2d6a2d' : '#c62828' }}>
-                          <input type="radio" checked={bookType===t} onChange={() => setBookType(t)} style={{ display:'none' }} />
-                          {t==='grön' ? '🟢 Ok bredvid' : '🔴 Ensam'}
-                        </label>
-                      ))}
-                    </div>
-                  </Field>
-                  <div style={{ display:'flex', gap:10, marginTop:10 }}>
-                    <button onClick={saveMultiBooking} style={{ flex:2, padding:'14px', borderRadius:9, border:'none', background:C.moss, color:'#fff', fontFamily:'Georgia,serif', fontWeight:'bold', cursor:'pointer', fontSize:'1rem' }}>Spara</button>
-                    <button onClick={() => setBookModal(false)} style={{ flex:1, padding:'14px', borderRadius:9, border:'1px solid '+C.parchment, background:'#fff', fontFamily:'Georgia,serif', cursor:'pointer', fontSize:'1rem', color:C.bark }}>Avbryt</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
+              </main>
       {!isMobile && (
         <footer style={{ textAlign:'center', padding:'20px', color:C.muted, fontSize:'0.72rem', borderTop:'1px solid '+C.parchment, marginTop:20 }}>
           🌿 Höglanda Hästgård · Stallapp
