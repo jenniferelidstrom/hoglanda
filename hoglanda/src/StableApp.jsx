@@ -318,30 +318,11 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookName, setBookName] = useState('')
   const [bookType, setBookType] = useState('grön')
 
-  const sortDagbokEntries = entries => [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  function normalizeDagbokEntries(entries) {
-    if (!Array.isArray(entries)) return []
-    return sortDagbokEntries(entries.map((entry, index) => ({
-      id: entry.id || (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `dagbok-${entry.horse || 'okand'}-${entry.date || TODAY_DATE}-${index}`),
-      horse: entry.horse || '',
-      date: entry.date || TODAY_DATE,
-      ryttare: entry.ryttare || '',
-      vad: entry.vad || '',
-      kandes: entry.kandes || '',
-      ovrigt: entry.ovrigt || '',
-      user_id: entry.user_id || '',
-      name: entry.name || ''
-    })))
-  }
-
   useEffect(() => { loadAllData() }, [])
 
   async function loadAllData() {
     setLoadingData(true)
-    const { data, error: appDataError } = await supabase.from('app_data').select('key, value')
-    let dagbokLoadedFromAppData = false
-
-    if (appDataError) console.error('Kunde inte läsa app_data', appDataError)
+    const { data } = await supabase.from('app_data').select('key, value')
     if (data) data.forEach(row => {
       if (row.key === 'horseNames') setHorseNames(row.value)
       if (row.key === 'riderConfig') setRiderConfig(row.value)
@@ -349,64 +330,32 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
-      if (row.key === 'dagbokEntries') {
-        setDagbokEntries(normalizeDagbokEntries(row.value))
-        dagbokLoadedFromAppData = true
-      }
     })
-
     let myHorses = []
     if (!isAdmin) {
       const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
       if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
       else setUserHorses(null)
     }
-
     const stroQuery = isAdmin
       ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
       : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
     const { data: s } = await stroQuery
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-
     const hoQuery = isAdmin
       ? supabase.from('ho_log').select('*').order('date', { ascending: false })
       : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
     const { data: h } = await hoQuery
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-
-    if (!dagbokLoadedFromAppData) {
-      const { data: db, error: dagbokError } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
-      if (dagbokError) {
-        console.error('Kunde inte läsa dagbokstabellen', dagbokError)
-      } else {
-        const migratedDagbokEntries = normalizeDagbokEntries(db)
-        if (migratedDagbokEntries.length > 0) {
-          setDagbokEntries(migratedDagbokEntries)
-          await saveKey('dagbokEntries', migratedDagbokEntries)
-        }
-      }
-    }
-
+    const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
+    if (db) setDagbokEntries(db)
     setLoadingData(false)
   }
 
   async function saveKey(key, value) {
     setSaving(true)
-    const { error } = await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
+    await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
     setSaving(false)
-    if (error) console.error(`Kunde inte spara ${key}`, error)
-    return { error }
-  }
-
-  async function persistDagbokEntries(nextEntries) {
-    const normalized = normalizeDagbokEntries(nextEntries)
-    setDagbokEntries(normalized)
-    const { error } = await saveKey('dagbokEntries', normalized)
-    if (error) {
-      alert('Kunde inte spara dagboken: ' + error.message)
-      return false
-    }
-    return true
   }
 
   function goSchedWeek(d) {
@@ -567,35 +516,19 @@ export default function StableApp({ session, role, onSignOut }) {
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
   async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
-    const name = userEmail.split('@')[0]
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
-
     if (existing) {
-      await persistDagbokEntries(dagbokEntries.map(entry =>
-        entry.id === existing.id
-          ? { ...entry, ryttare, vad, kandes, ovrigt, user_id: userId, name }
-          : entry
-      ))
-      return
+      await supabase.from('dagbok').update({ ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
+      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] } : e))
+    } else {
+      const name = userEmail.split('@')[0]
+      const { data } = await supabase.from('dagbok').insert({ horse, date, ryttare, vad, kandes, ovrigt, user_id: userId, name }).select().single()
+      if (data) setDagbokEntries(p => [data, ...p].sort((a,b) => b.date.localeCompare(a.date)))
     }
-
-    await persistDagbokEntries([
-      {
-        id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `dagbok-${horse}-${date}`,
-        horse,
-        date,
-        ryttare,
-        vad,
-        kandes,
-        ovrigt,
-        user_id: userId,
-        name,
-      },
-      ...dagbokEntries,
-    ])
   }
   async function deleteDagbokEntry(id) {
-    await persistDagbokEntries(dagbokEntries.filter(e => e.id !== id))
+    await supabase.from('dagbok').delete().eq('id', id)
+    setDagbokEntries(p => p.filter(e => e.id !== id))
   }
 
   const foderHorses = (userHorses ? horseNames.filter(n => userHorses.includes(n)) : horseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
@@ -608,10 +541,9 @@ export default function StableApp({ session, role, onSignOut }) {
     { id:'foder',     label:foderLabel,    icon:'🍽️' },
     { id:'stro',      label:'Strö',        icon:'📦' },
     { id:'ho',        label:'Hö',          icon:'🌾' },
-    { id:'info',      label:'Info',        icon:'ℹ️', notAdmin: true },
     { id:'settings',  label:'Inställning', icon:'⚙️', adminOnly: true },
     { id:'export',    label:'Export',      icon:'📊', adminOnly: true },
-  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare) && (!t.notAdmin || !isAdmin))
+  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare))
 
 
   if (loadingData) return (
@@ -1212,53 +1144,6 @@ export default function StableApp({ session, role, onSignOut }) {
           <ExportTab stroLog={stroLog} hoLog={hoLog} isMobile={isMobile} userId={userId} />
         )}
 
-        {tab === 'info' && (
-          <div>
-            <SectionTitle icon="ℹ️" title="Välkommen till Höglanda-appen!" sub="Här hittar du information om hur du använder appen" />
-
-            {/* Rollbeskrivning */}
-            <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:20, marginBottom:16 }}>
-              <h3 style={{ color:C.bark, fontSize:'1rem', margin:'0 0 8px', display:'flex', alignItems:'center', gap:8 }}>
-                {isRyttare ? '🏇 Du är inloggad som Medryttare' : '🐴 Du är inloggad som Inackordering'}
-              </h3>
-              <p style={{ color:C.muted, fontSize:'0.85rem', margin:0, lineHeight:1.6 }}>
-                {isRyttare
-                  ? 'Som medryttare kan du se schemat, boka paddock, skriva i dagboken, se foderstater samt logga strö- och höförbrukning för dina hästar. Du har även tillgång till aktivitetsplaneringen.'
-                  : 'Som inackordering kan du se schemat, boka paddock, skriva i dagboken, se foderstater samt logga strö- och höförbrukning för dina hästar.'}
-              </p>
-            </div>
-
-            {/* Flikguide */}
-            {[
-              { icon:'📅', title:'Schema', text:'Här ser du veckoschemat med alla pass (utsläpp, fodring m.m.). Du kan se vem som är ansvarig för varje pass varje dag. Schemat är skrivskyddat för dig – admin hanterar ändringar.' },
-              ...(isRyttare ? [{ icon:'🐎', title:'Aktiviteter', text:'Planera veckans ridaktiviteter för varje häst. Skriv vad som ska göras (t.ex. "Dressyr", "Hoppning") och vem som är ansvarig. Bra för att koordinera ridningen.' }] : []),
-              { icon:'📓', title:'Dagbok', text:'Skriv dagboksanteckningar om dina hästar – hur de mådde, om du märkt något speciellt, eller bara vad ni gjorde. Välj häst och datum, så sparas allt automatiskt.' },
-              { icon:'🏟️', title:'Paddock', text:'Boka paddocktider för dina hästar. Tryck på ett tidsfält för att markera. Grönt = ok att rida bredvid, rött = vill vara ensam i paddocken. Perfekt för att undvika krockar.' },
-              { icon:'🍽️', title:'Foderstater', text:'Se och redigera foderstater för dina hästar. Här anges hö, kraftfoder, mash och övrig info för varje måltid (morgon, lunch, middag, kväll).' },
-              { icon:'📦', title:'Strö', text:'Logga ströförbrukning för dina hästar. Välj häst, typ av strö, mängd och datum. Du kan se historiken och följa förbrukningen månad för månad.' },
-              { icon:'🌾', title:'Hö', text:'Logga höförbrukning för dina hästar. Ange mängd i kg och datum. Historiken visar förbrukningen och du kan följa den per månad.' },
-            ].map((item, i) => (
-              <div key={i} style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:'16px 20px', marginBottom:10 }}>
-                <h4 style={{ color:C.forest, fontSize:'0.92rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>
-                  {item.icon} {item.title}
-                </h4>
-                <p style={{ color:C.muted, fontSize:'0.82rem', margin:0, lineHeight:1.6 }}>{item.text}</p>
-              </div>
-            ))}
-
-            {/* Tips */}
-            <div style={{ background:'linear-gradient(135deg, #e8f5e8, #f0f7e8)', borderRadius:12, border:'1.5px solid '+C.sage, padding:20, marginTop:8 }}>
-              <h3 style={{ color:C.forest, fontSize:'1rem', margin:'0 0 10px', display:'flex', alignItems:'center', gap:8 }}>💡 Tips</h3>
-              <ul style={{ color:C.bark, fontSize:'0.84rem', margin:0, paddingLeft:20, lineHeight:1.8 }}>
-                <li>All data sparas automatiskt – du behöver aldrig trycka "Spara".</li>
-                <li>Du ser bara information som rör dina egna hästar.</li>
-                <li>Har du frågor eller problem? Kontakta stallchefen!</li>
-                <li>Appen fungerar på både mobil och dator.</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
         {tab === 'paddock' && (
           <div>
             <SectionTitle icon="🏟️" title="Paddockbokning" sub={isMobile ? 'Tryck för att markera tidsfält' : 'Klicka och dra – grön = ok att rida bredvid, röd = ensam'} />
@@ -1573,11 +1458,15 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
     const totalUsed = filterInvByMonth(usageLogs).filter(l => l.item === productId).reduce((s, l) => s + +l.amount, 0)
     const totalAdjusted = filterInvByMonth(adjustments).filter(a => a.product === productId).reduce((s, a) => s + +a.amount, 0)
 
+    // Beräkna ingående saldo från alla föregående månader
     let openingBalance = 0
     if (invMonth !== 'all') {
-      const prevIn = deliveries.filter(d => d.product === productId && d.date && d.date.substring(0,7) < invMonth).reduce((s, d) => s + +d.amount, 0)
-      const prevUsed = usageLogs.filter(l => l.item === productId && l.date && l.date.substring(0,7) < invMonth).reduce((s, l) => s + +l.amount, 0)
-      const prevAdj = adjustments.filter(a => a.product === productId && a.date && a.date.substring(0,7) < invMonth).reduce((s, a) => s + +a.amount, 0)
+      const prevDeliveries = deliveries.filter(d => d.product === productId && d.date && d.date.substring(0,7) < invMonth)
+      const prevUsage = usageLogs.filter(l => l.item === productId && l.date && l.date.substring(0,7) < invMonth)
+      const prevAdjustments = adjustments.filter(a => a.product === productId && a.date && a.date.substring(0,7) < invMonth)
+      const prevIn = prevDeliveries.reduce((s, d) => s + +d.amount, 0)
+      const prevUsed = prevUsage.reduce((s, l) => s + +l.amount, 0)
+      const prevAdj = prevAdjustments.reduce((s, a) => s + +a.amount, 0)
       openingBalance = prevIn - prevUsed - prevAdj
     }
 
