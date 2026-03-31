@@ -638,7 +638,7 @@ export default function StableApp({ session, role, onSignOut }) {
                         </button>
                         {pass === 'Insläpp' && (
                           <div style={{ padding:'0 15px 10px' }}>
-                            <input type="time" value={sched[dag]?.Insläpp_tid || ''} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.8rem', padding:'4px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%' }} />
+                            <input type="time" value={sched[dag]?.Insläpp_tid || ''} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.8rem', padding:'4px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%' }} disabled={!isAdmin} />
                           </div>
                         )}
                         {isOpen && isAdmin && (
@@ -691,7 +691,7 @@ export default function StableApp({ session, role, onSignOut }) {
                                     <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', minHeight:32, padding:'3px', borderRadius:6, fontFamily:'Georgia,serif', border:'1.5px solid '+(highlight ? C.moss : val.length ? C.straw : C.parchment), background: highlight ? '#f0f7ee' : val.length ? '#fffaf0' : '#fff', cursor: isAdmin ? 'pointer' : 'default', outline:'none', display:'flex', flexWrap:'wrap', gap:2, alignItems:'center', justifyContent:'center' }}>
                                       {val.length === 0 ? <span style={{ fontSize:'0.6rem', color:C.muted }}>—</span> : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:3, padding:'1px 5px', fontSize:'0.58rem', fontWeight:'bold' }}>{p}</span>)}
                                     </button>
-                                    {pass === 'Insläpp' && <input type="time" value={sched[dag]?.Insläpp_tid || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.6rem', padding:'1px 3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} />}
+                                    {pass === 'Insläpp' && <input type="time" value={sched[dag]?.Insläpp_tid || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.6rem', padding:'1px 3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} disabled={!isAdmin} />}
                                   </div>
                                   {isOpen && isAdmin && (
                                     <div style={{ position:'absolute', [isBottomRow ? 'bottom' : 'top']:'calc(100% + 3px)', left:0, zIndex:50, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:8, padding:'7px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)', minWidth:105 }}>
