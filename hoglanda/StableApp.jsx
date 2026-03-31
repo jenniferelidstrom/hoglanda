@@ -1192,7 +1192,7 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
-
+        {tab === 'paddock' && (
           <div>
             <SectionTitle icon="🏟️" title="Paddockbokning" sub={isMobile ? 'Tryck för att markera tidsfält' : 'Klicka och dra – grön = ok att rida bredvid, röd = ensam'} />
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
