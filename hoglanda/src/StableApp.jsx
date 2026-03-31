@@ -1154,15 +1154,15 @@ export default function StableApp({ session, role, onSignOut }) {
               </h3>
               <p style={{ color:C.muted, fontSize:'0.85rem', margin:0, lineHeight:1.6 }}>
                 {isRyttare
-                  ? 'Som medryttare kan du se schemat, boka paddock, skriva i dagboken, se foderstater samt logga strö- och höförbrukning för din/dina hästar. Du har även tillgång till att se aktivitetsplaneringen som fylls i av Linnea/Jennifer..'
+                  ? 'Som medryttare kan du se schemat, boka paddock, skriva i dagboken, se foderstater samt logga strö- och höförbrukning för din/dina hästar. Du har även tillgång till att se aktivitetsplaneringen som fylls i av Linnea/Jennifer.'
                   : 'Som inackordering kan du se schemat, boka paddock, skriva i dagboken, redigera foderstaten samt logga strö- och höförbrukning för din/dina hästar.'}
               </p>
             </div>
             {[
-              { icon:'📅', title:'Schema', text:'Här ser du veckoschemat med alla pass (utsläpp, fodring m.m.). Du kan se vem som är ansvarig för varje pass varje dag. Schemat är skrivskyddat för dig och familjen Lidström hanterar ändringar.' },
+              { icon:'📅', title:'Schema', text:'Här ser du veckoschemat med alla pass (utsläpp, fodring m.m.). Du kan se vem som är ansvarig för varje pass varje dag. Schemat är skrivskyddat för dig och Familjen Lidström hanterar ändringar.' },
               ...(isRyttare ? [{ icon:'🐎', title:'Aktiviteter', text:'Planera veckans ridaktiviteter för varje häst. Skriv vad som ska göras (t.ex. "Dressyr", "Hoppning", "Uteritt") och vem som är ansvarig.' }] : []),
-              { icon:'📓', title:'Dagbok', text:'Skriv dagboksanteckningar om dina hästar – hur de mådde, om du märkt något speciellt, eller bara vad ni gjorde.' },
-              { icon:'🏟️', title:'Paddock', text:'Boka paddocken. Ersätter tidigare kalkylblad, tryck på ett eller flera tidsfält för att markera. Grönt = ok att rida bredvid, rött = vill vara ensam i paddocken. Observera att du enbart kan boka paddocken fram till kl 18 dagen innan.' },
+              { icon:'📓', title:'Dagbok', text:'Skriv dagboksanteckningar om din/dina hästar – hur de mådde, om du märkt något speciellt, eller bara vad ni gjorde.' },
+              { icon:'🏟️', title:'Paddock', text:'Boka paddocken. Ersätter tidigare kalkylblad, tryck på ett eller flera tidsfält för att boka. Grönt = ok att rida bredvid, rött = vill vara ensam i paddocken. Observera att du enbart kan boka paddocken fram till kl 18 dagen innan.' },
               { icon:'🍽️', title:'Foderstater', text:'Se och redigera foderstater för din/dina hästar. Här anges hö, kraftfoder, mash och övrig info för varje måltid (morgon, lunch, middag, kväll).' },
               { icon:'📦', title:'Strö', text:'Logga ströförbrukning för din/dina hästar. Välj häst, typ av strö, mängd och datum. Du kan se historiken och följa förbrukningen månad för månad.' },
               { icon:'🌾', title:'Hö', text:'Logga höförbrukning för din/dina hästar. Ange mängd i kg och datum. Historiken visar förbrukningen och du kan följa den per månad.' },
