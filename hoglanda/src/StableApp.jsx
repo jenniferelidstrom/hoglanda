@@ -318,11 +318,30 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookName, setBookName] = useState('')
   const [bookType, setBookType] = useState('grön')
 
+  const sortDagbokEntries = entries => [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  function normalizeDagbokEntries(entries) {
+    if (!Array.isArray(entries)) return []
+    return sortDagbokEntries(entries.map((entry, index) => ({
+      id: entry.id || (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `dagbok-${entry.horse || 'okand'}-${entry.date || TODAY_DATE}-${index}`),
+      horse: entry.horse || '',
+      date: entry.date || TODAY_DATE,
+      ryttare: entry.ryttare || '',
+      vad: entry.vad || '',
+      kandes: entry.kandes || '',
+      ovrigt: entry.ovrigt || '',
+      user_id: entry.user_id || '',
+      name: entry.name || ''
+    })))
+  }
+
   useEffect(() => { loadAllData() }, [])
 
   async function loadAllData() {
     setLoadingData(true)
-    const { data } = await supabase.from('app_data').select('key, value')
+    const { data, error: appDataError } = await supabase.from('app_data').select('key, value')
+    let dagbokLoadedFromAppData = false
+
+    if (appDataError) console.error('Kunde inte läsa app_data', appDataError)
     if (data) data.forEach(row => {
       if (row.key === 'horseNames') setHorseNames(row.value)
       if (row.key === 'riderConfig') setRiderConfig(row.value)
@@ -330,32 +349,64 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
+      if (row.key === 'dagbokEntries') {
+        setDagbokEntries(normalizeDagbokEntries(row.value))
+        dagbokLoadedFromAppData = true
+      }
     })
+
     let myHorses = []
     if (!isAdmin) {
       const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
       if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
       else setUserHorses(null)
     }
+
     const stroQuery = isAdmin
       ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
       : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
     const { data: s } = await stroQuery
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
+
     const hoQuery = isAdmin
       ? supabase.from('ho_log').select('*').order('date', { ascending: false })
       : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
     const { data: h } = await hoQuery
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
-    if (db) setDagbokEntries(db)
+
+    if (!dagbokLoadedFromAppData) {
+      const { data: db, error: dagbokError } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
+      if (dagbokError) {
+        console.error('Kunde inte läsa dagbokstabellen', dagbokError)
+      } else {
+        const migratedDagbokEntries = normalizeDagbokEntries(db)
+        if (migratedDagbokEntries.length > 0) {
+          setDagbokEntries(migratedDagbokEntries)
+          await saveKey('dagbokEntries', migratedDagbokEntries)
+        }
+      }
+    }
+
     setLoadingData(false)
   }
 
   async function saveKey(key, value) {
     setSaving(true)
-    await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
+    const { error } = await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
     setSaving(false)
+    if (error) console.error(`Kunde inte spara ${key}`, error)
+    return { error }
+  }
+
+  async function persistDagbokEntries(nextEntries) {
+    const normalized = normalizeDagbokEntries(nextEntries)
+    setDagbokEntries(normalized)
+    const { error } = await saveKey('dagbokEntries', normalized)
+    if (error) {
+      alert('Kunde inte spara dagboken: ' + error.message)
+      return false
+    }
+    return true
   }
 
   function goSchedWeek(d) {
@@ -516,19 +567,35 @@ export default function StableApp({ session, role, onSignOut }) {
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
   async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
+    const name = userEmail.split('@')[0]
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
+
     if (existing) {
-      await supabase.from('dagbok').update({ ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
-      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] } : e))
-    } else {
-      const name = userEmail.split('@')[0]
-      const { data } = await supabase.from('dagbok').insert({ horse, date, ryttare, vad, kandes, ovrigt, user_id: userId, name }).select().single()
-      if (data) setDagbokEntries(p => [data, ...p].sort((a,b) => b.date.localeCompare(a.date)))
+      await persistDagbokEntries(dagbokEntries.map(entry =>
+        entry.id === existing.id
+          ? { ...entry, ryttare, vad, kandes, ovrigt, user_id: userId, name }
+          : entry
+      ))
+      return
     }
+
+    await persistDagbokEntries([
+      {
+        id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `dagbok-${horse}-${date}`,
+        horse,
+        date,
+        ryttare,
+        vad,
+        kandes,
+        ovrigt,
+        user_id: userId,
+        name,
+      },
+      ...dagbokEntries,
+    ])
   }
   async function deleteDagbokEntry(id) {
-    await supabase.from('dagbok').delete().eq('id', id)
-    setDagbokEntries(p => p.filter(e => e.id !== id))
+    await persistDagbokEntries(dagbokEntries.filter(e => e.id !== id))
   }
 
   const foderHorses = (userHorses ? horseNames.filter(n => userHorses.includes(n)) : horseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
