@@ -546,9 +546,18 @@ export default function StableApp({ session, role, onSignOut }) {
   }
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
 
-  // Get horses visible for current month (used throughout app)
+  // Get horses visible for current month (default/fallback)
   const now2 = stockholmNowDate()
   const visibleHorseNames = getVisibleHorseNames(horseConfig, now2.getFullYear(), now2.getMonth()).sort((a,b) => a.localeCompare(b, 'sv'))
+  // Per-tab visible horses based on each tab's selected month/week
+  const visibleHorsesStro = getVisibleHorseNames(horseConfig, stroMonth.year, stroMonth.month).sort((a,b) => a.localeCompare(b, 'sv'))
+  const visibleHorsesHo = getVisibleHorseNames(horseConfig, hoMonth.year, hoMonth.month).sort((a,b) => a.localeCompare(b, 'sv'))
+  const visibleHorsesAct = (() => {
+    // Activity tab uses week view - check visibility for the week's Monday date
+    const mondayStr = localDateStr(actMonday)
+    const [y, m] = mondayStr.split('-').map(Number)
+    return getVisibleHorseNames(horseConfig, y, m - 1).sort((a,b) => a.localeCompare(b, 'sv'))
+  })()
 
   async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
@@ -761,7 +770,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <Field label="Häst">
                   <select value={sForm.horse} onChange={e => setSForm(f => ({ ...f, horse: e.target.value }))} style={{ ...inp, width:'100%' }}>
                     <option value="">Välj häst...</option>
-                    {(userHorses || visibleHorseNames).map(h => <option key={h} value={h}>{h}</option>)}
+                    {(userHorses || visibleHorsesStro).map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </Field>
                 <Field label="Datum">
@@ -790,7 +799,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setStroFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(stroFilterHorses.length===0 ? C.moss : C.parchment), background: stroFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: stroFilterHorses.length===0 ? C.forest : C.bark, fontWeight: stroFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {visibleHorseNames.map(h => {
+                  {visibleHorsesStro.map(h => {
                     const active = stroFilterHorses.includes(h)
                     return <button key={h} onClick={() => setStroFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
@@ -871,7 +880,7 @@ export default function StableApp({ session, role, onSignOut }) {
             hoEditId={hoEditId} setHoEditId={setHoEditId} hoEditData={hoEditData} setHoEditData={setHoEditData}
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
             filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
-            hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorseNames} />
+            hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorsesHo} />
         )}
 
         {tab === 'foder' && (
@@ -979,7 +988,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setActFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(actFilterHorses.length===0 ? C.moss : C.parchment), background: actFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: actFilterHorses.length===0 ? C.forest : C.bark, fontWeight: actFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {ACTIVITY_HORSE_ORDER.filter(h => visibleHorseNames.includes(h)).map(h => {
+                  {ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h)).map(h => {
                     const active = actFilterHorses.includes(h)
                     return <button key={h} onClick={() => setActFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
@@ -987,8 +996,8 @@ export default function StableApp({ session, role, onSignOut }) {
               </div>
             )}
             {(() => {
-              const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => visibleHorseNames.includes(h))
-              const extraHorses = visibleHorseNames.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
+              const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h))
+              const extraHorses = visibleHorsesAct.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
               const allActivityHorses = [...orderedHorses, ...extraHorses]
               const displayHorses = isRyttare && userHorses ? allActivityHorses.filter(h => userHorses.includes(h)) : actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
               return isMobile ? (
