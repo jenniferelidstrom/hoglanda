@@ -579,7 +579,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const foderLabel = foderHorses.length === 1 ? 'Foderstat' : 'Foderstater'
   const TABS = [
     { id:'schema',    label:'Schema',      icon:'📅' },
-    { id:'aktivitet', label:'Aktiviteter', icon:'🐎', notInackordering: true },
+    { id:'aktivitet', label:'Aktiviteter', icon:'🐎' },
     { id:'dagbok',    label:'Dagbok',      icon:'📓' },
     { id:'paddock',   label:'Paddock',     icon:'🏟️' },
     { id:'foder',     label:foderLabel,    icon:'🍽️' },
@@ -981,7 +981,7 @@ export default function StableApp({ session, role, onSignOut }) {
 
         {tab === 'aktivitet' && (
           <div>
-            <SectionTitle icon="🐎" title="Hästaktivitet" sub={isAdmin ? 'Veckans aktiviteter per häst' : 'Skrivskyddat'} />
+            <SectionTitle icon="🐎" title="Hästaktivitet" sub={isAdmin ? 'Veckans aktiviteter per häst' : userHorses ? 'Du kan redigera dina egna hästar' : 'Skrivskyddat'} />
             <WeekNav info={weekLabel(actMonday)} isNow={actOffset===0} onPrev={() => goActWeek(-1)} onNext={() => goActWeek(1)} />
             {isAdmin && (
               <div style={{ background:'#fff', borderRadius:12, padding:'14px 18px', border:'1.5px solid '+C.parchment, marginBottom:16 }}>
@@ -999,7 +999,7 @@ export default function StableApp({ session, role, onSignOut }) {
               const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h))
               const extraHorses = visibleHorsesAct.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
               const allActivityHorses = [...orderedHorses, ...extraHorses]
-              const displayHorses = isRyttare && userHorses ? allActivityHorses.filter(h => userHorses.includes(h)) : actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
+              const displayHorses = !isAdmin && userHorses ? allActivityHorses.filter(h => userHorses.includes(h)) : actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
               return isMobile ? (
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                   {displayHorses.map((name, hi) => (
@@ -1017,8 +1017,8 @@ export default function StableApp({ session, role, onSignOut }) {
                                 {dag}{isToday ? ' •' : ''}
                               </div>
                               <div style={{ padding:'6px 8px' }}>
-                                <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'2px 4px', fontSize:'0.85rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                                <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />
+                                <textarea value={cell.text} onChange={e => (isAdmin || (userHorses && userHorses.includes(name))) && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin && !(userHorses && userHorses.includes(name))} placeholder="—" rows={2} style={{ width:'100%', padding:'2px 4px', fontSize:'0.85rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                                <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin && !(userHorses && userHorses.includes(name))} />
                               </div>
                             </div>
                           )
@@ -1051,8 +1051,8 @@ export default function StableApp({ session, role, onSignOut }) {
                             const highlight = actOffset===0 && dag===TODAY
                             return (
                               <td key={dag} style={{ padding:'3px', borderBottom:'1px solid '+C.parchment, borderLeft:'1px solid '+C.parchment, background: highlight ? 'rgba(74,103,65,0.04)' : 'transparent', verticalAlign:'top', minWidth:85 }}>
-                                <textarea value={cell.text} onChange={e => isAdmin && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize:'0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
-                                {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin} />}
+                                <textarea value={cell.text} onChange={e => (isAdmin || (userHorses && userHorses.includes(name))) && updateAct(name, dag, 'text', e.target.value)} readOnly={!isAdmin && !(userHorses && userHorses.includes(name))} placeholder="—" rows={2} style={{ width:'100%', padding:'3px 4px', fontSize:'0.67rem', border:'none', background:'transparent', resize:'none', fontFamily:'Georgia,serif', color:C.bark, outline:'none', lineHeight:1.4 }} />
+                                {dag !== 'Övrigt' && <RiderPicker horseName={name} selected={cell.ansvarig||[]} onChange={val => updateAct(name, dag, 'ansvarig', val)} riderConfig={riderConfig} readOnly={!isAdmin && !(userHorses && userHorses.includes(name))} />}
                               </td>
                             )
                           })}
