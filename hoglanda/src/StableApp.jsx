@@ -143,8 +143,31 @@ function buildInitialRiderConfig() {
   INITIAL_HORSES.forEach(h => { cfg[h.name] = h.riders.map(name => ({ id: Math.random().toString(36).slice(2), name, from:'', to:'' })) })
   return cfg
 }
+function buildInitialHorseConfig() {
+  return INITIAL_HORSES.map(h => ({ id: Math.random().toString(36).slice(2), name: h.name, from:'', to:'' }))
+}
 function getActiveRiders(riderConfig, horseName, dateStr) {
   return (riderConfig[horseName] || []).filter(r => (!r.from || dateStr >= r.from) && (!r.to || dateStr <= r.to)).map(r => r.name)
+}
+function isHorseVisibleForMonth(horse, year, month) {
+  // month is 0-indexed
+  const monthStart = year + '-' + String(month+1).padStart(2,'0') + '-01'
+  const lastDay = new Date(year, month+1, 0).getDate()
+  const monthEnd = year + '-' + String(month+1).padStart(2,'0') + '-' + String(lastDay).padStart(2,'0')
+  if (horse.from && horse.from > monthEnd) return false
+  if (horse.to && horse.to < monthStart) return false
+  return true
+}
+function isHorseVisibleForDate(horse, dateStr) {
+  // Visible if the horse's range overlaps with the month of dateStr
+  const [y, m] = dateStr.split('-').map(Number)
+  return isHorseVisibleForMonth(horse, y, m - 1)
+}
+function getVisibleHorseNames(horseConfig, year, month) {
+  return horseConfig.filter(h => isHorseVisibleForMonth(h, year, month)).map(h => h.name)
+}
+function getVisibleHorseNamesForDate(horseConfig, dateStr) {
+  return horseConfig.filter(h => isHorseVisibleForDate(h, dateStr)).map(h => h.name)
 }
 function fmtKg(v) { return Number.isInteger(v) ? v + ' kg' : v + ' kg' }
 
@@ -255,6 +278,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const [loadingData, setLoadingData] = useState(true)
 
   const [horseNames, setHorseNames] = useState(INITIAL_HORSES.map(h => h.name))
+  const [horseConfig, setHorseConfig] = useState(buildInitialHorseConfig())
   const [riderConfig, setRiderConfig] = useState(buildInitialRiderConfig())
   const [foderState, setFoderState] = useState(() => emptyFoder(INITIAL_HORSES.map(h => h.name)))
 
@@ -325,6 +349,7 @@ export default function StableApp({ session, role, onSignOut }) {
     const { data } = await supabase.from('app_data').select('key, value')
     if (data) data.forEach(row => {
       if (row.key === 'horseNames') setHorseNames(row.value)
+      if (row.key === 'horseConfig') setHorseConfig(row.value)
       if (row.key === 'riderConfig') setRiderConfig(row.value)
       if (row.key === 'foderState') setFoderState(row.value)
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
@@ -513,7 +538,17 @@ export default function StableApp({ session, role, onSignOut }) {
   }
 
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
+  async function saveHorseConfig(cfg) { 
+    setHorseConfig(cfg)
+    setHorseNames(cfg.map(h => h.name))
+    await saveKey('horseConfig', cfg)
+    await saveKey('horseNames', cfg.map(h => h.name))
+  }
   async function saveRiderConfig(cfg) { setRiderConfig(cfg); await saveKey('riderConfig', cfg) }
+
+  // Get horses visible for current month (used throughout app)
+  const now2 = stockholmNowDate()
+  const visibleHorseNames = getVisibleHorseNames(horseConfig, now2.getFullYear(), now2.getMonth()).sort((a,b) => a.localeCompare(b, 'sv'))
 
   async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
@@ -531,7 +566,7 @@ export default function StableApp({ session, role, onSignOut }) {
     setDagbokEntries(p => p.filter(e => e.id !== id))
   }
 
-  const foderHorses = (userHorses ? horseNames.filter(n => userHorses.includes(n)) : horseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
+  const foderHorses = (userHorses ? visibleHorseNames.filter(n => userHorses.includes(n)) : visibleHorseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
   const foderLabel = foderHorses.length === 1 ? 'Foderstat' : 'Foderstater'
   const TABS = [
     { id:'schema',    label:'Schema',      icon:'📅' },
@@ -726,7 +761,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <Field label="Häst">
                   <select value={sForm.horse} onChange={e => setSForm(f => ({ ...f, horse: e.target.value }))} style={{ ...inp, width:'100%' }}>
                     <option value="">Välj häst...</option>
-                    {(userHorses || HORSES_SORTED).map(h => <option key={h} value={h}>{h}</option>)}
+                    {(userHorses || visibleHorseNames).map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </Field>
                 <Field label="Datum">
@@ -755,7 +790,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setStroFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(stroFilterHorses.length===0 ? C.moss : C.parchment), background: stroFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: stroFilterHorses.length===0 ? C.forest : C.bark, fontWeight: stroFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {HORSES_SORTED.map(h => {
+                  {visibleHorseNames.map(h => {
                     const active = stroFilterHorses.includes(h)
                     return <button key={h} onClick={() => setStroFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
@@ -794,7 +829,7 @@ export default function StableApp({ session, role, onSignOut }) {
                               </select>
                               <select value={editData.horse||''} onChange={e => setEditData(d => ({ ...d, horse: e.target.value }))} style={{ ...inp, flex:1, minWidth:100 }}>
                                 <option value="">Välj häst...</option>
-                                {(userHorses || HORSES_SORTED).map(h => <option key={h} value={h}>{h}</option>)}
+                                {(userHorses || visibleHorseNames).map(h => <option key={h} value={h}>{h}</option>)}
                               </select>
                               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                 <button onClick={() => setEditData(d => ({ ...d, amount: Math.max(1,d.amount-1) }))} style={{ background:C.parchment, border:'none', borderRadius:7, width:38, height:38, cursor:'pointer', fontSize:'1rem' }}>−</button>
@@ -836,7 +871,7 @@ export default function StableApp({ session, role, onSignOut }) {
             hoEditId={hoEditId} setHoEditId={setHoEditId} hoEditData={hoEditData} setHoEditData={setHoEditData}
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
             filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
-            hoMonth={hoMonth} setHoMonth={setHoMonth} />
+            hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorseNames} />
         )}
 
         {tab === 'foder' && (
@@ -847,7 +882,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setFoderFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(foderFilterHorses.length===0 ? C.moss : C.parchment), background: foderFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: foderFilterHorses.length===0 ? C.forest : C.bark, fontWeight: foderFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {HORSES_SORTED.map(h => {
+                  {visibleHorseNames.map(h => {
                     const active = foderFilterHorses.includes(h)
                     return <button key={h} onClick={() => setFoderFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
@@ -944,7 +979,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setActFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(actFilterHorses.length===0 ? C.moss : C.parchment), background: actFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: actFilterHorses.length===0 ? C.forest : C.bark, fontWeight: actFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {ACTIVITY_HORSE_ORDER.filter(h => horseNames.includes(h)).map(h => {
+                  {ACTIVITY_HORSE_ORDER.filter(h => visibleHorseNames.includes(h)).map(h => {
                     const active = actFilterHorses.includes(h)
                     return <button key={h} onClick={() => setActFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
@@ -952,8 +987,8 @@ export default function StableApp({ session, role, onSignOut }) {
               </div>
             )}
             {(() => {
-              const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => horseNames.includes(h))
-              const extraHorses = horseNames.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
+              const orderedHorses = ACTIVITY_HORSE_ORDER.filter(h => visibleHorseNames.includes(h))
+              const extraHorses = visibleHorseNames.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))
               const allActivityHorses = [...orderedHorses, ...extraHorses]
               const displayHorses = isRyttare && userHorses ? allActivityHorses.filter(h => userHorses.includes(h)) : actFilterHorses.length > 0 ? allActivityHorses.filter(h => actFilterHorses.includes(h)) : allActivityHorses
               return isMobile ? (
@@ -1023,7 +1058,7 @@ export default function StableApp({ session, role, onSignOut }) {
         )}
 
         {tab === 'dagbok' && (() => {
-          const dagbokHorseList = (userHorses || horseNames.slice().sort((a,b) => a.localeCompare(b,'sv')))
+          const dagbokHorseList = (userHorses || visibleHorseNames.slice().sort((a,b) => a.localeCompare(b,'sv')))
           if (!dagbokHorse && dagbokHorseList.length > 0 && dagbokHorseList[0]) {
             setTimeout(() => setDagbokHorse(dagbokHorseList[0]), 0)
           }
@@ -1138,7 +1173,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={horseNames} isMobile={isMobile} />
+          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1284,8 +1319,8 @@ export default function StableApp({ session, role, onSignOut }) {
 
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
-function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth }) {
-  const horseList = allowedHorses || HORSES_SORTED
+function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth, visibleHorseNames }) {
+  const horseList = allowedHorses || visibleHorseNames || HORSES_SORTED
   const monthPrefix = hoMonth.year + '-' + String(hoMonth.month + 1).padStart(2, '0')
   const monthFiltered = hoLog.filter(l => l.date && l.date.startsWith(monthPrefix))
   const filtered = isAdmin && filterHorses.length > 0 ? monthFiltered.filter(l => filterHorses.includes(l.horse)) : monthFiltered
@@ -1334,7 +1369,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             <button onClick={() => setFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(filterHorses.length===0 ? C.moss : C.parchment), background: filterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: filterHorses.length===0 ? C.forest : C.bark, fontWeight: filterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-            {HORSES_SORTED.map(h => {
+            {(visibleHorseNames || HORSES_SORTED).map(h => {
               const active = filterHorses.includes(h)
               return <button key={h} onClick={() => setFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
             })}
@@ -1766,11 +1801,26 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   )
 }
 
-function SettingsTab({ riderConfig, setRiderConfig, horseNames, isMobile }) {
+function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
+  const [newHorseName, setNewHorseName] = useState('')
+  const [newHorseFrom, setNewHorseFrom] = useState('')
+  const [newHorseTo, setNewHorseTo] = useState('')
+  const [showEndedHorses, setShowEndedHorses] = useState(false)
   const today = TODAY_DATE
+
+  function horseStatusLabel(h) {
+    // Month-level: check if current month is within range
+    const now = stockholmNowDate()
+    const monthStart = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-01'
+    const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()
+    const monthEnd = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(lastDay).padStart(2,'0')
+    if (h.from && h.from > monthEnd) return { text:'Ej börjat', color:'#c49a2a', bg:'#fdf6d8' }
+    if (h.to && h.to < monthStart) return { text:'Avslutad', color:'#d9534f', bg:'#fce8e8' }
+    return { text:'Aktiv', color:'#4a6741', bg:'#e8f5e8' }
+  }
 
   function statusLabel(r) {
     if (r.to && r.to < today) return { text:'Avslutad', color:'#d9534f', bg:'#fce8e8' }
@@ -1783,11 +1833,97 @@ function SettingsTab({ riderConfig, setRiderConfig, horseNames, isMobile }) {
     setRiderConfig({ ...riderConfig, [horse]: [...(riderConfig[horse]||[]), entry] })
     setNewName(p => ({ ...p, [horse]:'' })); setNewFrom(p => ({ ...p, [horse]:'' })); setNewTo(p => ({ ...p, [horse]:'' }))
   }
+  function addHorse() {
+    const name = newHorseName.trim(); if (!name) return
+    if (horseConfig.some(h => h.name.toLowerCase() === name.toLowerCase())) { alert('Hästen finns redan!'); return }
+    const entry = { id: Math.random().toString(36).slice(2), name, from: newHorseFrom||'', to: newHorseTo||'' }
+    setHorseConfig([...horseConfig, entry])
+    setNewHorseName(''); setNewHorseFrom(''); setNewHorseTo('')
+  }
+  function updateHorse(id, field, value) {
+    setHorseConfig(horseConfig.map(h => h.id === id ? { ...h, [field]: value } : h))
+  }
+  function removeHorse(id) {
+    if (!confirm('Är du säker på att du vill ta bort denna häst? Hästens data (foderstat, loggar etc) bevaras.')) return
+    setHorseConfig(horseConfig.filter(h => h.id !== id))
+  }
   const si = { padding:'10px 12px', borderRadius:8, border:'1.5px solid #ede6d3', fontSize:'0.9rem', fontFamily:'Georgia,serif', color:'#3d2b1a', background:'#f7f2e8', outline:'none' }
+
+  const activeHorses = horseConfig.filter(h => horseStatusLabel(h).text !== 'Avslutad')
+  const endedHorses = horseConfig.filter(h => horseStatusLabel(h).text === 'Avslutad')
 
   return (
     <div>
-      <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera ryttare per häst med start- och slutdatum" />
+      <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera hästar och ryttare med start- och slutdatum" />
+
+      {/* ── HORSE MANAGEMENT ── */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
+        <h3 style={{ color:C.bark, fontFamily:'Georgia,serif', fontSize:'1.05rem', marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>🐴 Hantera hästar</h3>
+        <p style={{ color:C.muted, fontSize:'0.75rem', marginBottom:16 }}>Lägg till eller avsluta hästar. Om en häst avslutas mitt i en månad syns den hela den månaden.</p>
+
+        {activeHorses.map(h => {
+          const st = horseStatusLabel(h)
+          return (
+            <div key={h.id} style={{ padding:'12px 0', borderBottom:'1px solid #ede6d3' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                <span style={{ fontSize:'1rem', fontWeight:'bold', color:C.bark, flex:1 }}>🐴 {h.name}</span>
+                <span style={{ fontSize:'0.68rem', fontWeight:'bold', color:st.color, background:st.bg, borderRadius:4, padding:'2px 8px' }}>{st.text}</span>
+                <button onClick={() => removeHorse(h.id)} style={{ background:'#fce8e8', border:'none', borderRadius:7, width:34, height:34, cursor:'pointer', fontSize:'0.9rem' }}>🗑️</button>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                <span style={{ fontSize:'0.75rem', color:C.muted }}>Från:</span>
+                <input type="date" value={h.from} onChange={e => updateHorse(h.id, 'from', e.target.value)} style={{ ...si, flex:1, minWidth:130 }} />
+                <span style={{ fontSize:'0.75rem', color:C.muted }}>Till:</span>
+                <input type="date" value={h.to} onChange={e => updateHorse(h.id, 'to', e.target.value)} style={{ ...si, flex:1, minWidth:130 }} />
+              </div>
+            </div>
+          )
+        })}
+
+        {endedHorses.length > 0 && (
+          <div style={{ marginTop:12 }}>
+            <button onClick={() => setShowEndedHorses(!showEndedHorses)} style={{ background:'transparent', border:'1px solid '+C.parchment, borderRadius:8, padding:'8px 14px', fontSize:'0.8rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.muted, width:'100%' }}>
+              {showEndedHorses ? '▾' : '▸'} Avslutade hästar ({endedHorses.length})
+            </button>
+            {showEndedHorses && endedHorses.map(h => {
+              const st = horseStatusLabel(h)
+              return (
+                <div key={h.id} style={{ padding:'10px 0', borderBottom:'1px solid #ede6d3', opacity:0.7 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                    <span style={{ fontSize:'0.95rem', fontWeight:'bold', color:C.bark, flex:1 }}>🐴 {h.name}</span>
+                    <span style={{ fontSize:'0.68rem', fontWeight:'bold', color:st.color, background:st.bg, borderRadius:4, padding:'2px 8px' }}>{st.text}</span>
+                    <button onClick={() => removeHorse(h.id)} style={{ background:'#fce8e8', border:'none', borderRadius:7, width:34, height:34, cursor:'pointer', fontSize:'0.9rem' }}>🗑️</button>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'0.75rem', color:C.muted }}>Från:</span>
+                    <input type="date" value={h.from} onChange={e => updateHorse(h.id, 'from', e.target.value)} style={{ ...si, flex:1, minWidth:130 }} />
+                    <span style={{ fontSize:'0.75rem', color:C.muted }}>Till:</span>
+                    <input type="date" value={h.to} onChange={e => updateHorse(h.id, 'to', e.target.value)} style={{ ...si, flex:1, minWidth:130 }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:16, padding:'14px', background:C.cream, borderRadius:10, border:'1px dashed '+C.straw }}>
+          <input value={newHorseName} onChange={e => setNewHorseName(e.target.value)} placeholder="Namn på ny häst..." style={{ ...si, width:'100%' }} onKeyDown={e => e.key==='Enter' && addHorse()} />
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, flex:'1 1 140px' }}>
+              <span style={{ fontSize:'0.75rem', color:C.earth, whiteSpace:'nowrap' }}>Från:</span>
+              <input type="date" value={newHorseFrom} onChange={e => setNewHorseFrom(e.target.value)} style={{ ...si, flex:1 }} />
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:6, flex:'1 1 140px' }}>
+              <span style={{ fontSize:'0.75rem', color:C.earth, whiteSpace:'nowrap' }}>Till:</span>
+              <input type="date" value={newHorseTo} onChange={e => setNewHorseTo(e.target.value)} style={{ ...si, flex:1 }} />
+            </div>
+          </div>
+          <button onClick={addHorse} style={{ background:C.gold, color:C.bark, border:'none', borderRadius:9, padding:'12px 16px', cursor:'pointer', fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold' }}>+ Lägg till häst</button>
+        </div>
+      </div>
+
+      {/* ── RIDER MANAGEMENT ── */}
+      <SectionTitle icon="🏇" title="Ryttare per häst" sub="Hantera ryttare med start- och slutdatum" />
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         {horseNames.map(horse => {
           const riders = riderConfig[horse] || []
