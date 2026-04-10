@@ -462,6 +462,7 @@ export default function StableApp({ session, role, onSignOut }) {
   }
   function onDragEnd() { isDragging.current = false; visitedDrag.current = new Set(); dragStart.current = null }
   function canBookDate(ds) {
+    if (isAdmin) return true
     const parts = ds.split('-'); const d = new Date(+parts[0], +parts[1]-1, +parts[2])
     d.setDate(d.getDate()-1); d.setHours(18,0,0,0)
     return stockholmNowDate() < d
