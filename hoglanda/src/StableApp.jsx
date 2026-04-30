@@ -318,9 +318,9 @@ export default function StableApp({ session, role, onSignOut }) {
   const [hoEditId, setHoEditId] = useState(null)
   const [hoEditData, setHoEditData] = useState(null)
   const [hoMonth, setHoMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
-  // Hö-mall: { [horse]: { 0..6 (Mån..Sön): amountKg } }
-  const [hoTemplate, setHoTemplate] = useState({})
-  const [hoTemplateMsg, setHoTemplateMsg] = useState('')
+  // Bulk-loggning av hö: valda datum (YYYY-MM-DD) som ska få samma mängd
+  const [bulkHoDates, setBulkHoDates] = useState([])
+  const [bulkHoMsg, setBulkHoMsg] = useState('')
   const [userHorses, setUserHorses] = useState(null)
   const [stroFilterHorses, setStroFilterHorses] = useState([])
   const [hoFilterHorses, setHoFilterHorses] = useState([])
@@ -358,7 +358,6 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
-      if (row.key === 'hoTemplate') setHoTemplate(row.value || {})
     })
     let myHorses = []
     if (!isAdmin) {
@@ -542,64 +541,25 @@ export default function StableApp({ session, role, onSignOut }) {
     setHoLog(p => p.filter(l => l.id !== id))
   }
 
-  // ---- Hö-mall ----
-  // dayIdx: 0=Mån..6=Sön. Mappar till JS getDay() (0=Sön..6=Lör)
-  const MAL_TAG = '[mall]'
-  const MON_TO_JS = [1,2,3,4,5,6,0]
-  async function updateHoTemplate(horse, dayIdx, val) {
-    const amt = val === '' || val === null ? 0 : parseFloat(val)
-    const next = { ...hoTemplate, [horse]: { ...(hoTemplate[horse] || {}), [dayIdx]: isNaN(amt) ? 0 : amt } }
-    setHoTemplate(next); await saveKey('hoTemplate', next)
+  // ---- Bulk-loggning av hö/halm ----
+  // Admin väljer häst + mängd + item, kryssar i flera datum och loggar alla samtidigt.
+  function toggleBulkDate(dateStr) {
+    setBulkHoDates(prev => prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr])
   }
-  async function clearHoTemplateRow(horse) {
-    const next = { ...hoTemplate }; delete next[horse]
-    setHoTemplate(next); await saveKey('hoTemplate', next)
-  }
-  async function applyHoTemplateToMonth(year, month) {
+  function setBulkDates(dates) { setBulkHoDates(dates) }
+  async function submitHoBulk() {
     if (!isAdmin) return
-    const horsesWithTpl = Object.keys(hoTemplate).filter(h => {
-      const row = hoTemplate[h] || {}
-      return Object.values(row).some(v => v && v > 0)
-    })
-    if (horsesWithTpl.length === 0) { setHoTemplateMsg('Mallen är tom – fyll i mängder först.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
-    const lastDay = new Date(year, month+1, 0).getDate()
-    const monthPrefix = year + '-' + String(month+1).padStart(2,'0')
-    // Befintliga Hö-loggar i månaden, indexerade på date|horse
-    const existing = new Set(
-      hoLog.filter(l => l.item === 'Hö' && l.date && l.date.startsWith(monthPrefix))
-        .map(l => l.date + '|' + (l.horse || ''))
-    )
-    const toInsert = []
-    for (let d = 1; d <= lastDay; d++) {
-      const dateStr = monthPrefix + '-' + String(d).padStart(2,'0')
-      const jsDay = weekdayIndexFromDateStr(dateStr) // 0=Sön..6=Lör
-      const monIdx = MON_TO_JS.indexOf(jsDay) // 0=Mån..6=Sön
-      for (const horse of horsesWithTpl) {
-        const amt = (hoTemplate[horse] || {})[monIdx]
-        if (!amt || amt <= 0) continue
-        const key = dateStr + '|' + horse
-        if (existing.has(key)) continue // bevara manuella / redan applicerade
-        toInsert.push({ name: MAL_TAG, item: 'Hö', amount: amt, date: dateStr, user_id: userId, horse })
-      }
-    }
-    if (toInsert.length === 0) { setHoTemplateMsg('Inget att lägga till – allt finns redan för denna månad.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
-    const { data, error } = await supabase.from('ho_log').insert(toInsert).select()
-    if (error) { setHoTemplateMsg('Fel: ' + error.message); setTimeout(() => setHoTemplateMsg(''), 5000); return }
+    if (!hoForm.horse) { setBulkHoMsg('Välj en häst först.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
+    if (!hoForm.amount || hoForm.amount <= 0) { setBulkHoMsg('Ange en mängd större än 0.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
+    if (bulkHoDates.length === 0) { setBulkHoMsg('Välj minst ett datum.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
+    const name = userEmail.split('@')[0]
+    const rows = bulkHoDates.map(date => ({ name, item: hoForm.item, amount: hoForm.amount, date, user_id: userId, horse: hoForm.horse }))
+    const { data, error } = await supabase.from('ho_log').insert(rows).select()
+    if (error) { setBulkHoMsg('Fel: ' + error.message); setTimeout(() => setBulkHoMsg(''), 5000); return }
     if (data) setHoLog(p => [...data.map(d => ({ id:d.id, name:d.name, item:d.item, amount:d.amount, date:d.date, user_id:d.user_id, horse:d.horse||'' })), ...p].sort((a,b) => b.date.localeCompare(a.date)))
-    setHoTemplateMsg('✓ ' + toInsert.length + ' mallrader tillagda. Manuella loggar bevarades.')
-    setTimeout(() => setHoTemplateMsg(''), 5000)
-  }
-  async function removeHoTemplateFromMonth(year, month) {
-    if (!isAdmin) return
-    const monthPrefix = year + '-' + String(month+1).padStart(2,'0')
-    const ids = hoLog.filter(l => l.name === MAL_TAG && l.item === 'Hö' && l.date && l.date.startsWith(monthPrefix)).map(l => l.id)
-    if (ids.length === 0) { setHoTemplateMsg('Inga mallrader att ta bort denna månad.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
-    if (!confirm('Ta bort ' + ids.length + ' mall-genererade hö-loggar för denna månad? (Manuella loggar rörs ej)')) return
-    const { error } = await supabase.from('ho_log').delete().in('id', ids)
-    if (error) { setHoTemplateMsg('Fel: ' + error.message); setTimeout(() => setHoTemplateMsg(''), 5000); return }
-    setHoLog(p => p.filter(l => !ids.includes(l.id)))
-    setHoTemplateMsg('✓ ' + ids.length + ' mallrader borttagna.')
-    setTimeout(() => setHoTemplateMsg(''), 5000)
+    setBulkHoMsg('✓ ' + rows.length + ' loggar tillagda för ' + hoForm.horse + ' (' + hoForm.amount + ' kg ' + hoForm.item + '). De kan ändras eller tas bort i historiken nedan.')
+    setBulkHoDates([])
+    setTimeout(() => setBulkHoMsg(''), 6000)
   }
 
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
@@ -946,9 +906,8 @@ export default function StableApp({ session, role, onSignOut }) {
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
             filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
             hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorsesHo}
-            hoTemplate={hoTemplate} updateHoTemplate={updateHoTemplate} clearHoTemplateRow={clearHoTemplateRow}
-            applyHoTemplateToMonth={applyHoTemplateToMonth} removeHoTemplateFromMonth={removeHoTemplateFromMonth}
-            hoTemplateMsg={hoTemplateMsg} malTag={MAL_TAG} />
+            bulkHoDates={bulkHoDates} setBulkHoDates={setBulkDates} toggleBulkDate={toggleBulkDate}
+            submitHoBulk={submitHoBulk} bulkHoMsg={bulkHoMsg} />
         )}
 
         {tab === 'foder' && (
@@ -1396,7 +1355,7 @@ export default function StableApp({ session, role, onSignOut }) {
 
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
-function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth, visibleHorseNames, hoTemplate, updateHoTemplate, clearHoTemplateRow, applyHoTemplateToMonth, removeHoTemplateFromMonth, hoTemplateMsg, malTag }) {
+function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth, visibleHorseNames, bulkHoDates, setBulkHoDates, toggleBulkDate, submitHoBulk, bulkHoMsg }) {
   const horseList = allowedHorses || visibleHorseNames || HORSES_SORTED
   const monthPrefix = hoMonth.year + '-' + String(hoMonth.month + 1).padStart(2, '0')
   const monthFiltered = hoLog.filter(l => l.date && l.date.startsWith(monthPrefix))
@@ -1453,63 +1412,86 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           </div>
         </div>
       )}
-      {isAdmin && (
-        <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 14 : 18, border:'1.5px solid '+C.gold, marginBottom:16 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:10 }}>
-            <h3 style={{ color:C.bark, margin:0, fontSize:'1rem' }}>🗓️ Hö-mall per veckodag</h3>
-            <span style={{ fontSize:'0.72rem', color:C.muted, fontStyle:'italic' }}>Sätt 0 = ingen automatisk loggning för den dagen</span>
-          </div>
-          <div style={{ overflowX:'auto', marginBottom:12 }}>
-            <table style={{ borderCollapse:'collapse', minWidth: 520, width:'100%' }}>
-              <thead>
-                <tr style={{ background:C.parchment }}>
-                  <th style={{ padding:'8px 10px', textAlign:'left', fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.05em', color:C.bark }}>Häst</th>
-                  {DAGAR_SHORT.map(d => <th key={d} style={{ padding:'8px 6px', fontSize:'0.7rem', textTransform:'uppercase', color:C.bark, minWidth:64 }}>{d}</th>)}
-                  <th style={{ padding:'8px 6px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(visibleHorseNames || HORSES_SORTED).map((h, ri) => {
-                  const row = hoTemplate[h] || {}
-                  return (
-                    <tr key={h} style={{ background: ri%2===0 ? '#fff' : C.cream, borderBottom:'1px solid '+C.parchment }}>
-                      <td style={{ padding:'6px 10px', fontWeight:'bold', color:C.bark, fontSize:'0.85rem' }}>🐴 {h}</td>
-                      {DAGAR_SHORT.map((_, di) => (
-                        <td key={di} style={{ padding:'4px 4px', textAlign:'center' }}>
-                          <input
-                            type="number" min="0" max="30" step="0.25"
-                            value={row[di] ?? ''}
-                            placeholder="0"
-                            onChange={e => updateHoTemplate(h, di, e.target.value)}
-                            style={{ width:60, padding:'6px 4px', borderRadius:6, border:'1px solid '+C.parchment, fontSize:'0.85rem', textAlign:'center', fontFamily:'Georgia,serif', color:C.bark, background:'#fff' }}
-                          />
-                        </td>
-                      ))}
-                      <td style={{ padding:'4px 6px', textAlign:'center' }}>
-                        <button onClick={() => clearHoTemplateRow(h)} title="Rensa hela raden" style={{ background:'#fce8e8', border:'none', borderRadius:6, width:30, height:30, cursor:'pointer', fontSize:'0.8rem' }}>🗑️</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
-            <button onClick={() => applyHoTemplateToMonth(hoMonth.year, hoMonth.month)} style={{ flex:'1 1 220px', padding:'12px 14px', borderRadius:9, border:'none', background:C.moss, color:'#fff', fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold', cursor:'pointer' }}>
-              ✓ Applicera mall på {MONTHS_SV[hoMonth.month]} {hoMonth.year}
+      {isAdmin && (() => {
+        const lastDay = new Date(hoMonth.year, hoMonth.month + 1, 0).getDate()
+        const days = Array.from({ length: lastDay }, (_, i) => {
+          const dd = String(i + 1).padStart(2, '0')
+          return monthPrefix + '-' + dd
+        })
+        const allSelected = days.length > 0 && days.every(d => bulkHoDates.includes(d))
+        const selectAll = () => setBulkHoDates(allSelected ? [] : days)
+        const selectWeekdays = () => {
+          const wd = days.filter(d => { const day = new Date(d).getDay(); return day !== 0 && day !== 6 })
+          setBulkHoDates(wd)
+        }
+        const selectWeekends = () => {
+          const we = days.filter(d => { const day = new Date(d).getDay(); return day === 0 || day === 6 })
+          setBulkHoDates(we)
+        }
+        return (
+          <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 14 : 18, border:'1.5px solid '+C.gold, marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:10 }}>
+              <h3 style={{ color:C.bark, margin:0, fontSize:'1rem' }}>📅 Massregistrering – samma mängd på flera dagar</h3>
+              <span style={{ fontSize:'0.72rem', color:C.muted, fontStyle:'italic' }}>Välj häst, mängd och typ ovan, kryssa sedan i datum</span>
+            </div>
+            <div style={{ fontSize:'0.8rem', color:C.bark, marginBottom:10, lineHeight:1.5 }}>
+              {hoForm.horse ? <>🐴 <strong>{hoForm.horse}</strong></> : <em style={{ color:C.muted }}>Ingen häst vald</em>}
+              {' · '}
+              <strong>{hoForm.amount} kg {hoForm.item}</strong>
+              {' · '}
+              {bulkHoDates.length > 0
+                ? <span style={{ color:C.forest }}><strong>{bulkHoDates.length}</strong> dag(ar) valda</span>
+                : <span style={{ color:C.muted }}>Inga datum valda</span>}
+            </div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
+              <button onClick={selectAll} style={{ padding:'6px 12px', borderRadius:18, border:'1.5px solid '+C.parchment, background:'#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>{allSelected ? 'Avmarkera alla' : 'Markera hela månaden'}</button>
+              <button onClick={selectWeekdays} style={{ padding:'6px 12px', borderRadius:18, border:'1.5px solid '+C.parchment, background:'#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>Endast vardagar</button>
+              <button onClick={selectWeekends} style={{ padding:'6px 12px', borderRadius:18, border:'1.5px solid '+C.parchment, background:'#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>Endast helger</button>
+              <button onClick={() => setBulkHoDates([])} style={{ padding:'6px 12px', borderRadius:18, border:'1.5px solid '+C.parchment, background:'#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.earth }}>Rensa val</button>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:4, marginBottom:12 }}>
+              {DAGAR_SHORT.map(d => <div key={d} style={{ textAlign:'center', fontSize:'0.65rem', textTransform:'uppercase', color:C.muted, fontWeight:'bold', padding:'2px 0' }}>{d}</div>)}
+              {(() => {
+                const firstJsDay = new Date(hoMonth.year, hoMonth.month, 1).getDay()
+                const leading = (firstJsDay + 6) % 7 // mon=0
+                return Array.from({ length: leading }).map((_, i) => <div key={'pad'+i} />)
+              })()}
+              {days.map(dateStr => {
+                const dayNum = parseInt(dateStr.slice(-2), 10)
+                const selected = bulkHoDates.includes(dateStr)
+                const jsDay = new Date(dateStr).getDay()
+                const isWeekend = jsDay === 0 || jsDay === 6
+                return (
+                  <button key={dateStr} onClick={() => toggleBulkDate(dateStr)}
+                    style={{
+                      padding:'10px 0', borderRadius:8,
+                      border:'1.5px solid '+(selected ? C.moss : C.parchment),
+                      background: selected ? C.moss : (isWeekend ? C.cream : '#fff'),
+                      color: selected ? '#fff' : C.bark,
+                      fontFamily:'Georgia,serif', fontSize:'0.9rem', fontWeight:'bold',
+                      cursor:'pointer', transition:'all 0.1s'
+                    }}>
+                    {dayNum}
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={submitHoBulk} disabled={!hoForm.horse || bulkHoDates.length === 0}
+              style={{ width:'100%', padding:'14px', borderRadius:9, border:'none',
+                background: (!hoForm.horse || bulkHoDates.length === 0) ? C.parchment : C.gold,
+                color:C.bark, fontFamily:'Georgia,serif', fontSize:'1rem', fontWeight:'bold',
+                cursor: (!hoForm.horse || bulkHoDates.length === 0) ? 'not-allowed' : 'pointer' }}>
+              ✓ Logga {hoForm.amount} kg {hoForm.item} på {bulkHoDates.length || 0} dag(ar){hoForm.horse ? ' för '+hoForm.horse : ''}
             </button>
-            <button onClick={() => removeHoTemplateFromMonth(hoMonth.year, hoMonth.month)} style={{ flex:'1 1 220px', padding:'12px 14px', borderRadius:9, border:'1.5px solid '+C.earth, background:'#fff', color:C.earth, fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold', cursor:'pointer' }}>
-              ✕ Ta bort mallrader för {MONTHS_SV[hoMonth.month]}
-            </button>
+            <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:8, lineHeight:1.5 }}>
+              Varje vald dag skapas som en egen logg och kan ändras eller tas bort i historiken nedan.
+            </div>
+            {bulkHoMsg && (
+              <div style={{ marginTop:10, background:'#fdf6d8', border:'1.5px solid '+C.gold, borderRadius:8, padding:'8px 12px', fontSize:'0.85rem', color:C.bark }}>{bulkHoMsg}</div>
+            )}
           </div>
-          <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:8, lineHeight:1.5 }}>
-            Mallen sparas och kan ändras när som helst. När du applicerar skapas en hö-logg per dag/häst – <strong>befintliga loggar (manuella eller tidigare mall-rader) skrivs aldrig över</strong>. Vill du uppdatera, ta bort mallraderna först och applicera om.
-          </div>
-          {hoTemplateMsg && (
-            <div style={{ marginTop:10, background:'#fdf6d8', border:'1.5px solid '+C.gold, borderRadius:8, padding:'8px 12px', fontSize:'0.85rem', color:C.bark }}>{hoTemplateMsg}</div>
-          )}
-        </div>
-      )}
+        )
+      })()}
       <MonthNavigator month={hoMonth} setMonth={setHoMonth} />
       <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
@@ -1549,8 +1531,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div>
                   <span style={{ fontWeight:'bold', fontSize:'0.95rem', color:C.bark }}>{l.horse ? '🐴 '+l.horse : l.name}</span>
-                  {l.name === malTag && <span style={{ marginLeft:6, fontSize:'0.65rem', background:C.parchment, color:C.earth, padding:'2px 6px', borderRadius:10, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em' }}>Mall</span>}
-                  <span style={{ color:C.muted, fontSize:'0.75rem' }}> · {l.item}{l.horse && l.name !== malTag ? ' · '+l.name : ''}</span>
+                  <span style={{ color:C.muted, fontSize:'0.75rem' }}> · {l.item}{l.horse ? ' · '+l.name : ''}</span>
                   <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:2 }}>{l.date}</div>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
