@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react' 
+import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 
 const C = {
@@ -318,6 +318,9 @@ export default function StableApp({ session, role, onSignOut }) {
   const [hoEditId, setHoEditId] = useState(null)
   const [hoEditData, setHoEditData] = useState(null)
   const [hoMonth, setHoMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  // Hö-mall: { [horse]: { 0..6 (Mån..Sön): amountKg } }
+  const [hoTemplate, setHoTemplate] = useState({})
+  const [hoTemplateMsg, setHoTemplateMsg] = useState('')
   const [userHorses, setUserHorses] = useState(null)
   const [stroFilterHorses, setStroFilterHorses] = useState([])
   const [hoFilterHorses, setHoFilterHorses] = useState([])
@@ -355,6 +358,7 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
+      if (row.key === 'hoTemplate') setHoTemplate(row.value || {})
     })
     let myHorses = []
     if (!isAdmin) {
@@ -536,6 +540,66 @@ export default function StableApp({ session, role, onSignOut }) {
     const { error } = await supabase.from('ho_log').delete().eq('id', id)
     if (error) { alert('Kunde inte ta bort: ' + error.message); return }
     setHoLog(p => p.filter(l => l.id !== id))
+  }
+
+  // ---- Hö-mall ----
+  // dayIdx: 0=Mån..6=Sön. Mappar till JS getDay() (0=Sön..6=Lör)
+  const MAL_TAG = '[mall]'
+  const MON_TO_JS = [1,2,3,4,5,6,0]
+  async function updateHoTemplate(horse, dayIdx, val) {
+    const amt = val === '' || val === null ? 0 : parseFloat(val)
+    const next = { ...hoTemplate, [horse]: { ...(hoTemplate[horse] || {}), [dayIdx]: isNaN(amt) ? 0 : amt } }
+    setHoTemplate(next); await saveKey('hoTemplate', next)
+  }
+  async function clearHoTemplateRow(horse) {
+    const next = { ...hoTemplate }; delete next[horse]
+    setHoTemplate(next); await saveKey('hoTemplate', next)
+  }
+  async function applyHoTemplateToMonth(year, month) {
+    if (!isAdmin) return
+    const horsesWithTpl = Object.keys(hoTemplate).filter(h => {
+      const row = hoTemplate[h] || {}
+      return Object.values(row).some(v => v && v > 0)
+    })
+    if (horsesWithTpl.length === 0) { setHoTemplateMsg('Mallen är tom – fyll i mängder först.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
+    const lastDay = new Date(year, month+1, 0).getDate()
+    const monthPrefix = year + '-' + String(month+1).padStart(2,'0')
+    // Befintliga Hö-loggar i månaden, indexerade på date|horse
+    const existing = new Set(
+      hoLog.filter(l => l.item === 'Hö' && l.date && l.date.startsWith(monthPrefix))
+        .map(l => l.date + '|' + (l.horse || ''))
+    )
+    const toInsert = []
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = monthPrefix + '-' + String(d).padStart(2,'0')
+      const jsDay = weekdayIndexFromDateStr(dateStr) // 0=Sön..6=Lör
+      const monIdx = MON_TO_JS.indexOf(jsDay) // 0=Mån..6=Sön
+      for (const horse of horsesWithTpl) {
+        const amt = (hoTemplate[horse] || {})[monIdx]
+        if (!amt || amt <= 0) continue
+        const key = dateStr + '|' + horse
+        if (existing.has(key)) continue // bevara manuella / redan applicerade
+        toInsert.push({ name: MAL_TAG, item: 'Hö', amount: amt, date: dateStr, user_id: userId, horse })
+      }
+    }
+    if (toInsert.length === 0) { setHoTemplateMsg('Inget att lägga till – allt finns redan för denna månad.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
+    const { data, error } = await supabase.from('ho_log').insert(toInsert).select()
+    if (error) { setHoTemplateMsg('Fel: ' + error.message); setTimeout(() => setHoTemplateMsg(''), 5000); return }
+    if (data) setHoLog(p => [...data.map(d => ({ id:d.id, name:d.name, item:d.item, amount:d.amount, date:d.date, user_id:d.user_id, horse:d.horse||'' })), ...p].sort((a,b) => b.date.localeCompare(a.date)))
+    setHoTemplateMsg('✓ ' + toInsert.length + ' mallrader tillagda. Manuella loggar bevarades.')
+    setTimeout(() => setHoTemplateMsg(''), 5000)
+  }
+  async function removeHoTemplateFromMonth(year, month) {
+    if (!isAdmin) return
+    const monthPrefix = year + '-' + String(month+1).padStart(2,'0')
+    const ids = hoLog.filter(l => l.name === MAL_TAG && l.item === 'Hö' && l.date && l.date.startsWith(monthPrefix)).map(l => l.id)
+    if (ids.length === 0) { setHoTemplateMsg('Inga mallrader att ta bort denna månad.'); setTimeout(() => setHoTemplateMsg(''), 4000); return }
+    if (!confirm('Ta bort ' + ids.length + ' mall-genererade hö-loggar för denna månad? (Manuella loggar rörs ej)')) return
+    const { error } = await supabase.from('ho_log').delete().in('id', ids)
+    if (error) { setHoTemplateMsg('Fel: ' + error.message); setTimeout(() => setHoTemplateMsg(''), 5000); return }
+    setHoLog(p => p.filter(l => !ids.includes(l.id)))
+    setHoTemplateMsg('✓ ' + ids.length + ' mallrader borttagna.')
+    setTimeout(() => setHoTemplateMsg(''), 5000)
   }
 
   async function saveHorseNames(names) { setHorseNames(names); await saveKey('horseNames', names) }
@@ -881,7 +945,10 @@ export default function StableApp({ session, role, onSignOut }) {
             hoEditId={hoEditId} setHoEditId={setHoEditId} hoEditData={hoEditData} setHoEditData={setHoEditData}
             submitHo={submitHo} saveHoEdit={saveHoEdit} deleteHo={deleteHo} allowedHorses={userHorses}
             filterHorses={hoFilterHorses} setFilterHorses={setHoFilterHorses}
-            hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorsesHo} />
+            hoMonth={hoMonth} setHoMonth={setHoMonth} visibleHorseNames={visibleHorsesHo}
+            hoTemplate={hoTemplate} updateHoTemplate={updateHoTemplate} clearHoTemplateRow={clearHoTemplateRow}
+            applyHoTemplateToMonth={applyHoTemplateToMonth} removeHoTemplateFromMonth={removeHoTemplateFromMonth}
+            hoTemplateMsg={hoTemplateMsg} malTag={MAL_TAG} />
         )}
 
         {tab === 'foder' && (
@@ -1329,7 +1396,7 @@ export default function StableApp({ session, role, onSignOut }) {
 
 const HORSES_SORTED = ['Calle','Celma','Charina','Hippo','Joker','Lova','Maggan','Mini','Selma','Skye','Spot','Spotty','Storm']
 
-function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth, visibleHorseNames }) {
+function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, setHoEditId, hoEditData, setHoEditData, submitHo, saveHoEdit, deleteHo, allowedHorses, filterHorses, setFilterHorses, hoMonth, setHoMonth, visibleHorseNames, hoTemplate, updateHoTemplate, clearHoTemplateRow, applyHoTemplateToMonth, removeHoTemplateFromMonth, hoTemplateMsg, malTag }) {
   const horseList = allowedHorses || visibleHorseNames || HORSES_SORTED
   const monthPrefix = hoMonth.year + '-' + String(hoMonth.month + 1).padStart(2, '0')
   const monthFiltered = hoLog.filter(l => l.date && l.date.startsWith(monthPrefix))
@@ -1386,6 +1453,63 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           </div>
         </div>
       )}
+      {isAdmin && (
+        <div style={{ background:'#fff', borderRadius:12, padding: isMobile ? 14 : 18, border:'1.5px solid '+C.gold, marginBottom:16 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:10 }}>
+            <h3 style={{ color:C.bark, margin:0, fontSize:'1rem' }}>🗓️ Hö-mall per veckodag</h3>
+            <span style={{ fontSize:'0.72rem', color:C.muted, fontStyle:'italic' }}>Sätt 0 = ingen automatisk loggning för den dagen</span>
+          </div>
+          <div style={{ overflowX:'auto', marginBottom:12 }}>
+            <table style={{ borderCollapse:'collapse', minWidth: 520, width:'100%' }}>
+              <thead>
+                <tr style={{ background:C.parchment }}>
+                  <th style={{ padding:'8px 10px', textAlign:'left', fontSize:'0.7rem', textTransform:'uppercase', letterSpacing:'0.05em', color:C.bark }}>Häst</th>
+                  {DAGAR_SHORT.map(d => <th key={d} style={{ padding:'8px 6px', fontSize:'0.7rem', textTransform:'uppercase', color:C.bark, minWidth:64 }}>{d}</th>)}
+                  <th style={{ padding:'8px 6px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(visibleHorseNames || HORSES_SORTED).map((h, ri) => {
+                  const row = hoTemplate[h] || {}
+                  return (
+                    <tr key={h} style={{ background: ri%2===0 ? '#fff' : C.cream, borderBottom:'1px solid '+C.parchment }}>
+                      <td style={{ padding:'6px 10px', fontWeight:'bold', color:C.bark, fontSize:'0.85rem' }}>🐴 {h}</td>
+                      {DAGAR_SHORT.map((_, di) => (
+                        <td key={di} style={{ padding:'4px 4px', textAlign:'center' }}>
+                          <input
+                            type="number" min="0" max="30" step="0.25"
+                            value={row[di] ?? ''}
+                            placeholder="0"
+                            onChange={e => updateHoTemplate(h, di, e.target.value)}
+                            style={{ width:60, padding:'6px 4px', borderRadius:6, border:'1px solid '+C.parchment, fontSize:'0.85rem', textAlign:'center', fontFamily:'Georgia,serif', color:C.bark, background:'#fff' }}
+                          />
+                        </td>
+                      ))}
+                      <td style={{ padding:'4px 6px', textAlign:'center' }}>
+                        <button onClick={() => clearHoTemplateRow(h)} title="Rensa hela raden" style={{ background:'#fce8e8', border:'none', borderRadius:6, width:30, height:30, cursor:'pointer', fontSize:'0.8rem' }}>🗑️</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+            <button onClick={() => applyHoTemplateToMonth(hoMonth.year, hoMonth.month)} style={{ flex:'1 1 220px', padding:'12px 14px', borderRadius:9, border:'none', background:C.moss, color:'#fff', fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold', cursor:'pointer' }}>
+              ✓ Applicera mall på {MONTHS_SV[hoMonth.month]} {hoMonth.year}
+            </button>
+            <button onClick={() => removeHoTemplateFromMonth(hoMonth.year, hoMonth.month)} style={{ flex:'1 1 220px', padding:'12px 14px', borderRadius:9, border:'1.5px solid '+C.earth, background:'#fff', color:C.earth, fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold', cursor:'pointer' }}>
+              ✕ Ta bort mallrader för {MONTHS_SV[hoMonth.month]}
+            </button>
+          </div>
+          <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:8, lineHeight:1.5 }}>
+            Mallen sparas och kan ändras när som helst. När du applicerar skapas en hö-logg per dag/häst – <strong>befintliga loggar (manuella eller tidigare mall-rader) skrivs aldrig över</strong>. Vill du uppdatera, ta bort mallraderna först och applicera om.
+          </div>
+          {hoTemplateMsg && (
+            <div style={{ marginTop:10, background:'#fdf6d8', border:'1.5px solid '+C.gold, borderRadius:8, padding:'8px 12px', fontSize:'0.85rem', color:C.bark }}>{hoTemplateMsg}</div>
+          )}
+        </div>
+      )}
       <MonthNavigator month={hoMonth} setMonth={setHoMonth} />
       <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
@@ -1425,7 +1549,8 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div>
                   <span style={{ fontWeight:'bold', fontSize:'0.95rem', color:C.bark }}>{l.horse ? '🐴 '+l.horse : l.name}</span>
-                  <span style={{ color:C.muted, fontSize:'0.75rem' }}> · {l.item}{l.horse ? ' · '+l.name : ''}</span>
+                  {l.name === malTag && <span style={{ marginLeft:6, fontSize:'0.65rem', background:C.parchment, color:C.earth, padding:'2px 6px', borderRadius:10, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.04em' }}>Mall</span>}
+                  <span style={{ color:C.muted, fontSize:'0.75rem' }}> · {l.item}{l.horse && l.name !== malTag ? ' · '+l.name : ''}</span>
                   <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:2 }}>{l.date}</div>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
