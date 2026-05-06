@@ -32,6 +32,16 @@ for (let h = 7; h < 22; h++) {
   })
 }
 
+const INBETNING_SLOTS = []
+for (let h = 7; h < 20; h++) {
+  ['00','30'].forEach(m => {
+    const start = String(h).padStart(2,'0') + ':' + m
+    const [eh, em] = m === '00' ? [h,'30'] : [h+1,'00']
+    INBETNING_SLOTS.push(start + '-' + String(eh).padStart(2,'0') + ':' + String(em).padStart(2,'0'))
+  })
+}
+const INBETNING_HAGAR = [1, 2, 3, 4]
+
 const INITIAL_HORSES = [
   { name:'Calle',   riders:['Linnea','Jennifer'] },
   { name:'Celma',   riders:[] },
@@ -305,6 +315,20 @@ export default function StableApp({ session, role, onSignOut }) {
   const curMK = monthKey(paddockMonth.year, paddockMonth.month)
   const paddockGrid = allPaddock[curMK] || {}
 
+  // ---- Inbetningshagar ----
+  const [inbetningEnabled, setInbetningEnabled] = useState(false)
+  const [inbetningMonth, setInbetningMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [allInbetning, setAllInbetning] = useState({}) // { 'YYYY-MM': { 'YYYY-MM-DD': { '<hage>|<slot>': { name, userId, groupId } } } }
+  const inbMK = monthKey(inbetningMonth.year, inbetningMonth.month)
+  const inbetningGrid = allInbetning[inbMK] || {}
+  const [inbSelection, setInbSelection] = useState(new Set()) // 'date|hage|slot'
+  const inbDragging = useRef(false)
+  const inbDragMode = useRef('add')
+  const inbDragStart = useRef(null)
+  const inbVisited = useRef(new Set())
+  const [inbBookModal, setInbBookModal] = useState(false)
+  const [inbBookName, setInbBookName] = useState('')
+
   const [stroLog, setStroLog] = useState([])
   const [sForm, setSForm] = useState({ stroAmount:0, pelletsAmount:0, horse:'' })
   const [sOk, setSOk] = useState(false)
@@ -358,6 +382,8 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
+      if (row.key === 'allInbetning') setAllInbetning(row.value || {})
+      if (row.key === 'inbetningEnabled') setInbetningEnabled(!!row.value)
     })
     let myHorses = []
     if (!isAdmin) {
@@ -502,6 +528,93 @@ export default function StableApp({ session, role, onSignOut }) {
     setAllPaddock(np); await saveKey('allPaddock', np); clearSelection()
   }
 
+  // ---- Inbetningshagar ----
+  function goInbMonth(delta) {
+    setInbetningMonth(prev => {
+      let m = prev.month + delta, y = prev.year
+      if (m > 11) { m = 0; y++ } else if (m < 0) { m = 11; y-- }
+      return { year: y, month: m }
+    })
+  }
+  const inbCellKey = (ds, hage, slot) => ds + '|' + hage + '|' + slot
+  function inbToggleCell(dk, hage, slot) {
+    const k = inbCellKey(dk, hage, slot)
+    setInbSelection(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
+  }
+  function onInbMouseDown(e, dk, hage, slot) {
+    e.preventDefault(); const k = inbCellKey(dk, hage, slot)
+    inbDragging.current = true; inbVisited.current = new Set([k])
+    inbDragStart.current = { dk, hage }
+    inbDragMode.current = inbSelection.has(k) ? 'remove' : 'add'
+    setInbSelection(prev => { const n = new Set(prev); inbDragMode.current === 'remove' ? n.delete(k) : n.add(k); return n })
+  }
+  function onInbMouseEnter(dk, hage, slot) {
+    if (!inbDragging.current) return
+    const start = inbDragStart.current
+    if (start && (dk !== start.dk || String(hage) !== String(start.hage))) return
+    const k = inbCellKey(dk, hage, slot)
+    if (inbVisited.current.has(k)) return; inbVisited.current.add(k)
+    setInbSelection(prev => { const n = new Set(prev); inbDragMode.current === 'remove' ? n.delete(k) : n.add(k); return n })
+  }
+  function onInbDragEnd() { inbDragging.current = false; inbVisited.current = new Set(); inbDragStart.current = null }
+  function inbCanBookDate(ds) {
+    if (isAdmin) return true
+    const parts = ds.split('-'); const d = new Date(+parts[0], +parts[1]-1, +parts[2])
+    d.setDate(d.getDate()-1); d.setHours(18,0,0,0)
+    return stockholmNowDate() < d
+  }
+  function inbSelectionHasUnbookable() { for (const k of inbSelection) if (!inbCanBookDate(k.split('|')[0])) return true; return false }
+  function inbClearSelection() { setInbSelection(new Set()); setInbBookModal(false) }
+  function openInbBookModal() {
+    if (!inbSelection.size) return
+    if (inbSelectionHasUnbookable()) { alert('Bokningar måste göras senast dagen innan kl 18:00.'); return }
+    setInbBookModal(true)
+  }
+  async function saveInbBooking() {
+    if (!inbBookName.trim()) return
+    const byKey = {}
+    for (const k of inbSelection) {
+      const [ds, hage, slot] = k.split('|')
+      if (!inbCanBookDate(ds)) continue
+      const idx = INBETNING_SLOTS.indexOf(slot)
+      const gk = ds + '|' + hage
+      if (!byKey[gk]) byKey[gk] = []
+      byKey[gk].push(idx)
+    }
+    const month = { ...(allInbetning[inbMK] || {}) }
+    Object.entries(byKey).forEach(([gk, idxs]) => {
+      const [ds, hage] = gk.split('|')
+      idxs.sort((a,b) => a-b)
+      const day = { ...(month[ds] || {}) }
+      let runStart = 0
+      for (let i = 0; i <= idxs.length; i++) {
+        if (i === idxs.length || idxs[i] !== idxs[i-1] + 1) {
+          const groupId = Math.random().toString(36).slice(2, 10)
+          for (let j = runStart; j < i; j++) {
+            const slot = INBETNING_SLOTS[idxs[j]]
+            day[hage + '|' + slot] = { name: inbBookName.trim(), userId, groupId }
+          }
+          runStart = i
+        }
+      }
+      month[ds] = day
+    })
+    const np = { ...allInbetning, [inbMK]: month }
+    setAllInbetning(np); await saveKey('allInbetning', np); inbClearSelection(); setInbBookName('')
+  }
+  async function deleteInbBooking() {
+    const month = { ...(allInbetning[inbMK] || {}) }
+    for (const k of inbSelection) {
+      const [ds, hage, slot] = k.split('|')
+      const day = { ...(month[ds] || {}) }; delete day[hage + '|' + slot]; month[ds] = day
+    }
+    const np = { ...allInbetning, [inbMK]: month }
+    setAllInbetning(np); await saveKey('allInbetning', np); inbClearSelection()
+  }
+  async function setInbetningEnabledSave(v) {
+    setInbetningEnabled(v); await saveKey('inbetningEnabled', v)
+  }
+
   async function submitStro() {
     if (!sForm.horse) return
     if (sForm.stroAmount === 0 && sForm.pelletsAmount === 0) return
@@ -607,13 +720,14 @@ export default function StableApp({ session, role, onSignOut }) {
     { id:'aktivitet', label:'Aktiviteter', icon:'🐎' },
     { id:'dagbok',    label:'Dagbok',      icon:'📓' },
     { id:'paddock',   label:'Paddock',     icon:'🏟️' },
+    { id:'inbetning', label:'Inbetningshagar', icon:'🌲', requireInbetning: true },
     { id:'foder',     label:foderLabel,    icon:'🍽️' },
     { id:'stro',      label:'Strö',        icon:'📦' },
     { id:'ho',        label:'Hö',          icon:'🌾' },
     { id:'info',      label:'Info',        icon:'ℹ️', notAdmin: true },
     { id:'settings',  label:'Inställning', icon:'⚙️', adminOnly: true },
     { id:'export',    label:'Export',      icon:'📊', adminOnly: true },
-  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare) && (!t.notAdmin || !isAdmin))
+  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare) && (!t.notAdmin || !isAdmin) && (!t.requireInbetning || inbetningEnabled))
 
 
   if (loadingData) return (
@@ -1209,7 +1323,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} />
+          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1343,7 +1457,152 @@ export default function StableApp({ session, role, onSignOut }) {
             )}
           </div>
         )}
+
+        {tab === 'inbetning' && inbetningEnabled && (
+          <div>
+            <SectionTitle icon="🌲" title="Inbetningshagar" sub={isMobile ? 'Tryck för att markera tidsfält' : 'Klicka och dra i samma rad – sammanhängande tider visas som ett block'} />
+
+            {/* Beskrivning + skiss */}
+            <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:16, marginBottom:14 }}>
+              <p style={{ color:C.bark, fontSize:'0.85rem', margin:'0 0 10px', lineHeight:1.55 }}>
+                Det finns fyra inbetningshagar i rad. <strong>Inbetningshage 1</strong> ligger närmast skogen och <strong>Inbetningshage 4</strong> närmast paddocken. Boka i 30-minuters intervall mellan kl 7:00 och 20:00. Bokningar markeras röda och flera tider i rad slås automatiskt ihop till ett block.
+              </p>
+              <svg viewBox="0 0 600 360" style={{ width:'100%', maxWidth:520, height:'auto', display:'block', margin:'0 auto', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }}>
+                {/* Skog (vänster om hagarna) */}
+                <text x="60" y="50" fontSize="14" fill={C.forest} fontFamily="Georgia,serif">🌲 Skog</text>
+                {/* Inbetningshagar 1-4 */}
+                {[1,2,3,4].map((n, i) => (
+                  <g key={n}>
+                    <rect x={180 + i*70} y={70} width={68} height={130} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
+                    <text x={180 + i*70 + 34} y={130} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Inbetnings-</text>
+                    <text x={180 + i*70 + 34} y={145} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">hage {n}</text>
+                  </g>
+                ))}
+                {/* Stora paddocken */}
+                <rect x={180} y={210} width={278} height={70} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
+                <text x={319} y={250} fontSize="13" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Paddock</text>
+                {/* Grushagar */}
+                <rect x={180} y={290} width={278} height={30} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
+                <text x={319} y={310} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Grushage</text>
+                <rect x={20} y={250} width={140} height={100} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
+                <text x={90} y={305} fontSize="12" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Grushage</text>
+                {/* Huset */}
+                <rect x={310} y={330} width={150} height={20} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
+                <text x={385} y={345} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Huset</text>
+                {/* Pilar för orientering */}
+                <text x={180} y={62} fontSize="10" fill={C.muted} fontFamily="Georgia,serif">← Skogen</text>
+                <text x={395} y={62} fontSize="10" fill={C.muted} fontFamily="Georgia,serif">Mot paddock →</text>
+              </svg>
+            </div>
+
+            {/* Månadsväljare */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, marginBottom:12 }}>
+              <button onClick={() => goInbMonth(-1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>‹</button>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontWeight:'bold', fontSize:'1rem', color:C.bark, fontFamily:'Georgia,serif' }}>{MONTHS_SV[inbetningMonth.month]} {inbetningMonth.year}</div>
+                {inbetningMonth.year===now.getFullYear() && inbetningMonth.month===now.getMonth() && <div style={{ fontSize:'0.68rem', color:C.moss, fontWeight:'bold' }}>Aktuell månad</div>}
+              </div>
+              <button onClick={() => goInbMonth(1)} style={{ background:C.parchment, border:'none', borderRadius:8, width:40, height:40, fontSize:'1.2rem', cursor:'pointer', color:C.bark }}>›</button>
+            </div>
+
+            {inbSelection.size > 0 && (
+              <div style={{ display:'flex', alignItems:'center', gap:8, background:C.bark, borderRadius:10, padding:'10px 14px', marginBottom:12, flexWrap:'wrap' }}>
+                <span style={{ color:C.straw, fontSize:'0.85rem', fontWeight:'bold' }}>{inbSelection.size} valda</span>
+                <button onClick={openInbBookModal} style={{ background: inbSelectionHasUnbookable() ? C.muted : C.moss, color:'#fff', border:'none', borderRadius:7, padding:'8px 14px', cursor:'pointer', fontFamily:'Georgia,serif', fontWeight:'bold', fontSize:'0.85rem' }}>✏️ Boka</button>
+                <button onClick={deleteInbBooking} style={{ background:'#c62828', color:'#fff', border:'none', borderRadius:7, padding:'8px 14px', cursor:'pointer', fontFamily:'Georgia,serif', fontWeight:'bold', fontSize:'0.85rem' }}>🗑️ Ta bort</button>
+                <button onClick={inbClearSelection} style={{ background:'transparent', color:C.straw, border:'1px solid rgba(200,169,110,0.4)', borderRadius:7, padding:'8px 12px', cursor:'pointer', fontFamily:'Georgia,serif', fontSize:'0.85rem', marginLeft:'auto' }}>✕</button>
+              </div>
+            )}
+
+            {/* En tabell per hage */}
+            {INBETNING_HAGAR.map(hage => (
+              <div key={hage} style={{ marginBottom:18 }}>
+                <h3 style={{ color:C.bark, fontFamily:'Georgia,serif', fontSize:'0.95rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>
+                  🌲 Inbetningshage {hage} <span style={{ fontSize:'0.7rem', color:C.muted, fontWeight:'normal' }}>{hage === 1 ? '(närmast skogen)' : hage === 4 ? '(närmast paddocken)' : ''}</span>
+                </h3>
+                <div style={{ overflowX:'auto', borderRadius:10, border:'1.5px solid '+C.parchment, maxHeight: isMobile ? '50vh' : '60vh', overflowY:'auto' }}
+                  onMouseLeave={onInbDragEnd} onMouseUp={onInbDragEnd}
+                  onMouseDown={e => { if (isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onInbMouseDown(e, td.dataset.dk, td.dataset.hage, td.dataset.slot) }}
+                  onMouseOver={e => { if (isMobile || !inbDragging.current) return; const td = e.target.closest('td[data-dk]'); if (!td) return; onInbMouseEnter(td.dataset.dk, td.dataset.hage, td.dataset.slot) }}
+                  onClick={e => { if (!isMobile) return; const td = e.target.closest('td[data-dk]'); if (!td) return; inbToggleCell(td.dataset.dk, td.dataset.hage, td.dataset.slot) }}
+                >
+                  <table style={{ borderCollapse:'collapse', minWidth: 80 + INBETNING_SLOTS.length * (isMobile ? 44 : 58) }}>
+                    <thead>
+                      <tr style={{ background:'#3d1f10', position:'sticky', top:0, zIndex:10 }}>
+                        <th style={{ padding:'8px 10px', textAlign:'left', color:'#fff', fontSize:'0.72rem', fontWeight:'bold', textTransform:'uppercase', whiteSpace:'nowrap', position:'sticky', left:0, background:'#3d1f10', zIndex:11, minWidth:isMobile?60:80 }}>Datum</th>
+                        {INBETNING_SLOTS.map(s => <th key={s} style={{ padding:'5px 2px', textAlign:'center', color:'#fff', fontSize: isMobile ? '0.55rem' : '0.68rem', fontWeight:'bold', borderLeft:'1px solid rgba(255,255,255,0.12)', whiteSpace:'nowrap', minWidth: isMobile ? 44 : 58, lineHeight:1.2 }}><div>{s.split('-')[0]}</div><div style={{ fontSize: isMobile ? '0.5rem' : '0.6rem', fontWeight:'bold' }}>{s.split('-')[1]}</div></th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getDaysInMonth(inbetningMonth.year, inbetningMonth.month).map((day, di) => {
+                        const dk = dateKey(day); const isToday = dk === TODAY_DATE; const daySlots = inbetningGrid[dk] || {}
+                        return (
+                          <tr key={dk} style={{ background: isToday ? 'rgba(74,103,65,0.07)' : di%2===0 ? '#fff' : C.cream }}>
+                            <td style={{ padding: isMobile ? '4px 6px' : '5px 8px', fontSize: isMobile ? '0.6rem' : '0.72rem', fontWeight: isToday ? 'bold' : 'normal', color: isToday ? C.moss : C.bark, whiteSpace:'nowrap', borderBottom:'1px solid '+C.parchment, position:'sticky', left:0, background: isToday ? '#f0f7ee' : di%2===0 ? '#fff' : C.cream, zIndex:5, borderRight:'1.5px solid '+C.parchment }}>
+                              {day.getDate() + ' ' + MONTHS_SHORT[day.getMonth()]}{!isMobile && ' ' + ['Sön','Mån','Tis','Ons','Tor','Fre','Lör'][day.getDay()]}{isToday ? ' ●' : ''}
+                            </td>
+                            {INBETNING_SLOTS.map((slot, si2) => {
+                              const booking = daySlots[hage + '|' + slot]
+                              const ck = inbCellKey(dk, hage, slot); const isSel = inbSelection.has(ck)
+                              // Visual merge: borders depend on neighbour with same groupId
+                              let leftSame = false, rightSame = false
+                              if (booking) {
+                                const prev = si2 > 0 ? daySlots[hage + '|' + INBETNING_SLOTS[si2-1]] : null
+                                const next = si2 < INBETNING_SLOTS.length-1 ? daySlots[hage + '|' + INBETNING_SLOTS[si2+1]] : null
+                                leftSame = !!(prev && prev.groupId && prev.groupId === booking.groupId)
+                                rightSame = !!(next && next.groupId && next.groupId === booking.groupId)
+                              }
+                              return (
+                                <td key={slot} data-dk={dk} data-hage={hage} data-slot={slot}
+                                  style={{ padding: booking ? 0 : '2px', borderLeft:'1px solid '+C.parchment, borderBottom:'1px solid '+C.parchment, cursor:'pointer', minWidth: isMobile ? 36 : 48, height: isMobile ? 28 : 30, userSelect:'none', outline: isSel ? '2px solid #1976d2' : 'none', outlineOffset:'-2px', opacity: !inbCanBookDate(dk) && !booking ? 0.4 : 1 }}>
+                                  {booking ? (
+                                    <div style={{
+                                      background: isSel ? '#e57373' : '#ffcdd2',
+                                      borderTopLeftRadius: leftSame ? 0 : 3,
+                                      borderBottomLeftRadius: leftSame ? 0 : 3,
+                                      borderTopRightRadius: rightSame ? 0 : 3,
+                                      borderBottomRightRadius: rightSame ? 0 : 3,
+                                      borderLeft: leftSame ? 'none' : '1px solid #c62828',
+                                      borderRight: rightSame ? 'none' : '1px solid #c62828',
+                                      borderTop:'1px solid #c62828', borderBottom:'1px solid #c62828',
+                                      marginLeft: leftSame ? 0 : 2, marginRight: rightSame ? 0 : 2,
+                                      height:'100%', display:'flex', alignItems:'center', justifyContent: leftSame ? 'flex-start' : 'center',
+                                      padding:'0 2px', pointerEvents:'none', overflow:'hidden'
+                                    }}>
+                                      {!leftSame && <span style={{ fontSize: isMobile ? '0.5rem' : '0.62rem', fontWeight:'bold', color:'#c62828', whiteSpace:'nowrap', pointerEvents:'none' }}>{booking.name}</span>}
+                                    </div>
+                                  ) : (
+                                    <div style={{ background: isSel ? 'rgba(25,118,210,0.15)' : 'transparent', borderRadius:3, height:'100%', pointerEvents:'none' }} />
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+
+            {inbBookModal && (
+              <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:100, display:'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent:'center', padding: isMobile ? 0 : 20 }} onClick={() => setInbBookModal(false)}>
+                <div style={{ background:C.cream, borderRadius: isMobile ? '18px 18px 0 0' : 14, padding: isMobile ? '24px 20px 32px' : 24, maxWidth:380, width:'100%', boxShadow:'0 -8px 40px rgba(0,0,0,0.25)', border:'1.5px solid '+C.straw }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ color:C.bark, fontFamily:'Georgia,serif', marginBottom:4, fontSize:'1.1rem' }}>Boka {inbSelection.size} tidsfält</h3>
+                  <p style={{ fontSize:'0.78rem', color:C.muted, marginBottom:18 }}>Sammanhängande tider i samma hage slås ihop till ett block.</p>
+                  <Field label="Namn"><input value={inbBookName} onChange={e => setInbBookName(e.target.value)} placeholder="Ditt namn..." style={inp} autoFocus /></Field>
+                  <div style={{ display:'flex', gap:10, marginTop:10 }}>
+                    <button onClick={saveInbBooking} style={{ flex:2, padding:'14px', borderRadius:9, border:'none', background:C.moss, color:'#fff', fontFamily:'Georgia,serif', fontWeight:'bold', cursor:'pointer', fontSize:'1rem' }}>Spara</button>
+                    <button onClick={() => setInbBookModal(false)} style={{ flex:1, padding:'14px', borderRadius:9, border:'1px solid '+C.parchment, background:'#fff', fontFamily:'Georgia,serif', cursor:'pointer', fontSize:'1rem', color:C.bark }}>Avbryt</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
+
       {!isMobile && (
         <footer style={{ textAlign:'center', padding:'20px', color:C.muted, fontSize:'0.72rem', borderTop:'1px solid '+C.parchment, marginTop:20 }}>
           🌿 Höglanda Hästgård · Stallapp
@@ -1390,9 +1649,24 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
           <Field label="Antal kg">
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <button onClick={() => setHoForm(f => ({ ...f, amount: Math.max(0.25, Math.round((f.amount - 0.25)*100)/100) }))} style={{ width:46, height:46, borderRadius:9, border:'1.5px solid '+C.parchment, background:C.parchment, fontSize:'1.4rem', cursor:'pointer', flexShrink:0 }}>−</button>
-              <select value={hoForm.amount} onChange={e => setHoForm(f => ({ ...f, amount: parseFloat(e.target.value) }))} style={{ flex:1, padding:'11px 10px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1.1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none', textAlign:'center', fontWeight:'bold' }}>
-                {HO_AMOUNTS.map(v => <option key={v} value={v}>{v} kg</option>)}
-              </select>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.25"
+                min="0"
+                max="50"
+                value={hoForm.amount}
+                onChange={e => {
+                  const v = e.target.value
+                  setHoForm(f => ({ ...f, amount: v === '' ? '' : parseFloat(v) }))
+                }}
+                onBlur={e => {
+                  const v = parseFloat(e.target.value)
+                  setHoForm(f => ({ ...f, amount: isNaN(v) || v < 0 ? 0 : v }))
+                }}
+                style={{ flex:1, padding:'11px 10px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1.1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none', textAlign:'center', fontWeight:'bold', width:'100%' }}
+              />
+              <span style={{ fontSize:'0.95rem', color:C.muted, fontFamily:'Georgia,serif' }}>kg</span>
               <button onClick={() => setHoForm(f => ({ ...f, amount: Math.min(30, Math.round((f.amount + 0.25)*100)/100) }))} style={{ width:46, height:46, borderRadius:9, border:'1.5px solid '+C.parchment, background:C.parchment, fontSize:'1.4rem', cursor:'pointer', flexShrink:0 }}>+</button>
             </div>
           </Field>
@@ -1917,7 +2191,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   )
 }
 
-function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile }) {
+function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
@@ -1971,6 +2245,21 @@ function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, set
   return (
     <div>
       <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera hästar och ryttare med start- och slutdatum" />
+
+      {/* ── FUNKTIONS-FLAGGOR ── */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
+        <h3 style={{ color:C.bark, fontFamily:'Georgia,serif', fontSize:'1.05rem', marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>🧩 Funktioner</h3>
+        <p style={{ color:C.muted, fontSize:'0.75rem', marginBottom:14 }}>Aktivera eller inaktivera flikar tillfälligt för säsong/period.</p>
+        <label style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:C.cream, borderRadius:10, border:'1px dashed '+C.straw, cursor:'pointer' }}>
+          <input type="checkbox" checked={!!inbetningEnabled} onChange={e => setInbetningEnabled && setInbetningEnabled(e.target.checked)} style={{ width:20, height:20, cursor:'pointer' }} />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:'0.95rem', fontWeight:'bold', color:C.bark }}>🌲 Inbetningshagar</div>
+            <div style={{ fontSize:'0.75rem', color:C.muted, marginTop:2 }}>Visar fliken där 4 inbetningshagar kan bokas i 30-min intervall (7–20).</div>
+          </div>
+          <span style={{ fontSize:'0.7rem', fontWeight:'bold', color: inbetningEnabled ? '#4a6741' : '#9a8a6a', background: inbetningEnabled ? '#e8f5e8' : '#f0ece0', padding:'4px 10px', borderRadius:6 }}>{inbetningEnabled ? 'Aktiverad' : 'Inaktiv'}</span>
+        </label>
+      </div>
+
 
       {/* ── HORSE MANAGEMENT ── */}
       <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
