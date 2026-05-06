@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { supabase } from './supabase.js'
+import { supabase } from '@/integrations/supabase/client'
 
 const C = {
   forest:'#2d4a2d', moss:'#4a6741', sage:'#7a9970',
