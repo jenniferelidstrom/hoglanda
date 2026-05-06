@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
+import inbetningshagarSkiss from '@/assets/inbetningshagar-skiss.png'
 
 const C = {
   forest:'#2d4a2d', moss:'#4a6741', sage:'#7a9970',
@@ -1467,32 +1468,10 @@ export default function StableApp({ session, role, onSignOut }) {
               <p style={{ color:C.bark, fontSize:'0.85rem', margin:'0 0 10px', lineHeight:1.55 }}>
                 Det finns fyra inbetningshagar i rad. <strong>Inbetningshage 1</strong> ligger närmast skogen och <strong>Inbetningshage 4</strong> närmast paddocken. Boka i 30-minuters intervall mellan kl 7:00 och 20:00. Bokningar markeras röda och flera tider i rad slås automatiskt ihop till ett block.
               </p>
-              <svg viewBox="0 0 600 360" style={{ width:'100%', maxWidth:520, height:'auto', display:'block', margin:'0 auto', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }}>
-                {/* Skog (vänster om hagarna) */}
-                <text x="60" y="50" fontSize="14" fill={C.forest} fontFamily="Georgia,serif">🌲 Skog</text>
-                {/* Inbetningshagar 1-4 */}
-                {[1,2,3,4].map((n, i) => (
-                  <g key={n}>
-                    <rect x={180 + i*70} y={70} width={68} height={130} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
-                    <text x={180 + i*70 + 34} y={130} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Inbetnings-</text>
-                    <text x={180 + i*70 + 34} y={145} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">hage {n}</text>
-                  </g>
-                ))}
-                {/* Stora paddocken */}
-                <rect x={180} y={210} width={278} height={70} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
-                <text x={319} y={250} fontSize="13" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Paddock</text>
-                {/* Grushagar */}
-                <rect x={180} y={290} width={278} height={30} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
-                <text x={319} y={310} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Grushage</text>
-                <rect x={20} y={250} width={140} height={100} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
-                <text x={90} y={305} fontSize="12" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Grushage</text>
-                {/* Huset */}
-                <rect x={310} y={330} width={150} height={20} fill="#fff" stroke={C.bark} strokeWidth="1.5" />
-                <text x={385} y={345} fontSize="11" fill={C.bark} fontFamily="Georgia,serif" textAnchor="middle">Huset</text>
-                {/* Pilar för orientering */}
-                <text x={180} y={62} fontSize="10" fill={C.muted} fontFamily="Georgia,serif">← Skogen</text>
-                <text x={395} y={62} fontSize="10" fill={C.muted} fontFamily="Georgia,serif">Mot paddock →</text>
-              </svg>
+              <p style={{ color:C.bark, fontSize:'0.85rem', margin:'0 0 10px', lineHeight:1.55 }}>
+                Hör gärna av dig till <strong>Jennifer</strong>, <strong>Linnea</strong> eller <strong>Agneta</strong> för råd kring inbetningstakt för just din häst.
+              </p>
+              <img src={inbetningshagarSkiss} alt="Skiss över inbetningshagar, grushagar och huset" style={{ width:'100%', maxWidth:520, height:'auto', display:'block', margin:'0 auto', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
             </div>
 
             {/* Månadsväljare */}
