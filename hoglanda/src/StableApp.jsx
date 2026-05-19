@@ -1130,7 +1130,7 @@ export default function StableApp({ session, role, onSignOut }) {
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   <button onClick={() => setActFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(actFilterHorses.length===0 ? C.moss : C.parchment), background: actFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: actFilterHorses.length===0 ? C.forest : C.bark, fontWeight: actFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h)).map(h => {
+                  {[...ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h)), ...visibleHorsesAct.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))].map(h => {
                     const active = actFilterHorses.includes(h)
                     return <button key={h} onClick={() => setActFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
                   })}
