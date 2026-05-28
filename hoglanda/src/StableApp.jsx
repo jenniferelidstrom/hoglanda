@@ -2067,16 +2067,17 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
           {PRODUCTS.map(prod => {
             const bal = calcBalance(prod.id)
             const isLow = bal.balance <= 0
+            const r = (n) => Math.round((Number(n) || 0) * 100) / 100
             return (
-              <div key={prod.id} style={{ background:'#fff', borderRadius:12, padding:16, border:'1.5px solid '+(isLow ? '#e57373' : C.parchment), position:'relative' }}>
+              <div key={prod.id} style={{ background:'#fff', borderRadius:12, padding:16, border:'1.5px solid '+(isLow ? '#e57373' : C.parchment), position:'relative', minWidth:0, overflow:'hidden' }}>
                 {isLow && <div style={{ position:'absolute', top:8, right:8, background:'#c62828', color:'#fff', borderRadius:4, padding:'2px 6px', fontSize:'0.6rem', fontWeight:'bold' }}>⚠ Lågt</div>}
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:4 }}>{prod.label}</div>
-                <div style={{ fontSize:'1.8rem', fontWeight:'bold', color: isLow ? '#c62828' : C.bark, marginBottom:8 }}>{bal.balance}<span style={{ fontSize:'0.7rem', fontWeight:'normal', color:C.muted }}> {prod.unit}</span></div>
+                <div style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight:'bold', color: isLow ? '#c62828' : C.bark, marginBottom:8, wordBreak:'break-all' }}>{r(bal.balance)}<span style={{ fontSize:'0.7rem', fontWeight:'normal', color:C.muted }}> {prod.unit}</span></div>
                 <div style={{ fontSize:'0.7rem', color:C.muted, lineHeight:1.6 }}>
-                  {invMonth !== 'all' && <div>📋 Ingående: <strong style={{ color:C.bark }}>{bal.openingBalance}</strong></div>}
-                  <div>📦 Inlevererat: <strong style={{ color:C.moss }}>{bal.totalIn}</strong></div>
-                  <div>📉 Förbrukat: <strong style={{ color:C.earth }}>{bal.totalUsed}</strong></div>
-                  {bal.totalAdjusted > 0 && <div>❌ Svinn: <strong style={{ color:'#c62828' }}>{bal.totalAdjusted}</strong></div>}
+                  {invMonth !== 'all' && <div>📋 Ingående: <strong style={{ color:C.bark }}>{r(bal.openingBalance)}</strong></div>}
+                  <div>📦 Inlevererat: <strong style={{ color:C.moss }}>{r(bal.totalIn)}</strong></div>
+                  <div>📉 Förbrukat: <strong style={{ color:C.earth }}>{r(bal.totalUsed)}</strong></div>
+                  {bal.totalAdjusted > 0 && <div>❌ Svinn: <strong style={{ color:'#c62828' }}>{r(bal.totalAdjusted)}</strong></div>}
                 </div>
               </div>
             )
