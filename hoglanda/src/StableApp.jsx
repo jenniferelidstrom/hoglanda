@@ -278,6 +278,40 @@ function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   )
 }
 
+function HorseDropdown({ label, horses, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  const all = selected.length === 0
+  const toggle = (h) => onChange(selected.includes(h) ? selected.filter(x => x !== h) : [...selected, h])
+  return (
+    <div ref={ref} style={{ position:'relative', display:'inline-block' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ padding:'8px 14px', borderRadius:8, border:'1.5px solid '+C.straw, background:'#fff', cursor:'pointer', fontFamily:'Georgia,serif', fontSize:'0.85rem', color:C.bark, display:'inline-flex', alignItems:'center', gap:8, fontWeight:'bold' }}>
+        🐴 {label || 'Filtrera hästar'}: {all ? 'Alla' : selected.length + ' valda'} <span style={{ fontSize:'0.7rem' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:200, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:10, padding:10, boxShadow:'0 8px 24px rgba(0,0,0,0.18)', minWidth:200, maxHeight:340, overflowY:'auto' }}>
+          <div style={{ display:'flex', gap:6, marginBottom:8, borderBottom:'1px solid '+C.parchment, paddingBottom:8 }}>
+            <button onClick={() => onChange(horses.slice())} style={{ flex:1, padding:'5px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:C.parchment, fontSize:'0.7rem', cursor:'pointer', color:C.bark, fontFamily:'Georgia,serif' }}>Markera alla</button>
+            <button onClick={() => onChange([])} style={{ flex:1, padding:'5px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:'#fff', fontSize:'0.7rem', cursor:'pointer', color:C.bark, fontFamily:'Georgia,serif' }}>Rensa</button>
+          </div>
+          {horses.map(h => (
+            <label key={h} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 6px', cursor:'pointer', borderRadius:6, fontSize:'0.85rem', color:C.bark, background: selected.includes(h) ? '#f0f7ee' : 'transparent' }}>
+              <input type="checkbox" checked={selected.includes(h)} onChange={() => toggle(h)} style={{ accentColor:C.moss, width:16, height:16 }} />{h}
+            </label>
+          ))}
+          <button onClick={() => setOpen(false)} style={{ marginTop:8, width:'100%', padding:'7px', borderRadius:6, border:'1px solid '+C.parchment, background:C.parchment, fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>Stäng</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function StableApp({ session, role, onSignOut }) {
   const isAdmin = role === 'admin'
   const isRyttare = role === 'medryttare'
@@ -355,6 +389,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const [hoFilterHorses, setHoFilterHorses] = useState([])
   const [foderFilterHorses, setFoderFilterHorses] = useState([])
   const [actFilterHorses, setActFilterHorses] = useState([])
+  const [hagarFilterHorses, setHagarFilterHorses] = useState([])
 
   const [dagbokEntries, setDagbokEntries] = useState([])
   const [dagbokHorse, setDagbokHorse] = useState('')
@@ -1145,13 +1180,7 @@ export default function StableApp({ session, role, onSignOut }) {
             {isAdmin && (
               <div style={{ background:'#fff', borderRadius:12, padding:'14px 18px', border:'1.5px solid '+C.parchment, marginBottom:16 }}>
                 <div style={{ fontSize:'0.78rem', color:C.muted, marginBottom:8, fontWeight:'bold', textTransform:'uppercase' }}>Filtrera på häst</div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                  <button onClick={() => setActFilterHorses([])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(actFilterHorses.length===0 ? C.moss : C.parchment), background: actFilterHorses.length===0 ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: actFilterHorses.length===0 ? C.forest : C.bark, fontWeight: actFilterHorses.length===0 ? 'bold' : 'normal' }}>Alla</button>
-                  {[...ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h)), ...visibleHorsesAct.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))].map(h => {
-                    const active = actFilterHorses.includes(h)
-                    return <button key={h} onClick={() => setActFilterHorses(prev => active ? prev.filter(x=>x!==h) : [...prev, h])} style={{ padding:'6px 12px', borderRadius:20, border:'1.5px solid '+(active ? C.moss : C.parchment), background: active ? '#e8f5e8' : '#fff', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Georgia,serif', color: active ? C.forest : C.bark, fontWeight: active ? 'bold' : 'normal' }}>🐴 {h}</button>
-                  })}
-                </div>
+                <HorseDropdown label="Hästar" horses={[...ACTIVITY_HORSE_ORDER.filter(h => visibleHorsesAct.includes(h)), ...visibleHorsesAct.filter(h => !ACTIVITY_HORSE_ORDER.includes(h))]} selected={actFilterHorses} onChange={setActFilterHorses} />
               </div>
             )}
             {(() => {
@@ -1476,23 +1505,38 @@ export default function StableApp({ session, role, onSignOut }) {
           </div>
         )}
 
-        {tab === 'hagar' && hagarEnabled && (
+        {tab === 'hagar' && hagarEnabled && (() => {
+          const hagarHorseFilter = hagarFilterHorses
+          const filterActive = hagarHorseFilter.length > 0
+          const visibleHagar = Array.from({ length: 14 }, (_, i) => i + 1).filter(hage => {
+            if (!filterActive) return true
+            const assigned = hagarAssignments[String(hage)] || []
+            return assigned.some(h => hagarHorseFilter.includes(h))
+          })
+          return (
           <div>
             <SectionTitle icon="🐴" title="Hagar" sub={isAdmin ? 'Tilldela hästar till hage 1–14' : 'Översikt över hästar i respektive hage'} />
+            <div style={{ background:'#fff', borderRadius:12, padding:'14px 18px', border:'1.5px solid '+C.parchment, marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <div style={{ fontSize:'0.78rem', color:C.muted, fontWeight:'bold', textTransform:'uppercase' }}>Visa hagar med</div>
+              <HorseDropdown label="Hästar" horses={visibleHorseNames} selected={hagarFilterHorses} onChange={setHagarFilterHorses} />
+              {filterActive && <span style={{ fontSize:'0.75rem', color:C.muted }}>{visibleHagar.length} av 14 hagar visas</span>}
+            </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20, background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 14 : 22 }}>
               <div>
                 <img src={hagarSkiss} alt="Skiss över hagar 1-14" style={{ width:'100%', height:'auto', display:'block', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {Array.from({ length: 14 }, (_, i) => i + 1).map(hage => {
+                {visibleHagar.length === 0 && <div style={{ fontSize:'0.85rem', color:C.muted, fontStyle:'italic', padding:10 }}>Inga hagar matchar filtreringen.</div>}
+                {visibleHagar.map(hage => {
                   const key = String(hage)
                   const assigned = hagarAssignments[key] || []
+                  const horseChips = filterActive ? visibleHorseNames.filter(h => hagarHorseFilter.includes(h) || assigned.includes(h)) : visibleHorseNames
                   return (
                     <div key={hage} style={{ border:'1px solid '+C.parchment, borderRadius:8, padding:10, background:C.cream }}>
                       <div style={{ fontWeight:'bold', color:C.bark, marginBottom:6, fontFamily:'Georgia,serif' }}>Hage {hage}</div>
                       {isAdmin ? (
                         <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                          {visibleHorseNames.map(h => {
+                          {horseChips.map(h => {
                             const on = assigned.includes(h)
                             return (
                               <button key={h} onClick={() => toggleHagarHorse(hage, h)} style={{ fontSize:'0.78rem', padding:'4px 10px', borderRadius:14, border:'1px solid '+(on ? C.moss : C.parchment), background: on ? C.moss : '#fff', color: on ? '#fff' : C.bark, cursor:'pointer', fontWeight: on ? 'bold' : 'normal' }}>
@@ -1503,7 +1547,7 @@ export default function StableApp({ session, role, onSignOut }) {
                         </div>
                       ) : (
                         <div style={{ fontSize:'0.85rem', color: assigned.length ? C.bark : C.muted }}>
-                          {assigned.length ? assigned.join(', ') : '— inga hästar —'}
+                          {(filterActive ? assigned.filter(h => hagarHorseFilter.includes(h)) : assigned).join(', ') || '— inga hästar —'}
                         </div>
                       )}
                     </div>
@@ -1512,7 +1556,8 @@ export default function StableApp({ session, role, onSignOut }) {
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {tab === 'inbetning' && inbetningEnabled && (
           <div>
