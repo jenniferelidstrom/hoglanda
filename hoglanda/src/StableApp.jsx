@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import inbetningshagarSkiss from '@/assets/inbetningshagar-skiss.png'
+import hagarSkiss from '@/assets/hagar-skiss.png'
 
 const C = {
   forest:'#2d4a2d', moss:'#4a6741', sage:'#7a9970',
@@ -322,6 +323,9 @@ export default function StableApp({ session, role, onSignOut }) {
   const [allInbetning, setAllInbetning] = useState({}) // { 'YYYY-MM': { 'YYYY-MM-DD': { '<hage>|<slot>': { name, userId, groupId } } } }
   const inbMK = monthKey(inbetningMonth.year, inbetningMonth.month)
   const inbetningGrid = allInbetning[inbMK] || {}
+  // ---- Hagar (1-14) ----
+  const [hagarEnabled, setHagarEnabled] = useState(false)
+  const [hagarAssignments, setHagarAssignments] = useState({}) // { '1': ['HästA','HästB'], ... }
   const [inbSelection, setInbSelection] = useState(new Set()) // 'date|hage|slot'
   const inbDragging = useRef(false)
   const inbDragMode = useRef('add')
@@ -385,6 +389,8 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'allPaddock') setAllPaddock(row.value)
       if (row.key === 'allInbetning') setAllInbetning(row.value || {})
       if (row.key === 'inbetningEnabled') setInbetningEnabled(!!row.value)
+      if (row.key === 'hagarAssignments') setHagarAssignments(row.value || {})
+      if (row.key === 'hagarEnabled') setHagarEnabled(!!row.value)
     })
     let myHorses = []
     if (!isAdmin) {
@@ -615,6 +621,16 @@ export default function StableApp({ session, role, onSignOut }) {
   async function setInbetningEnabledSave(v) {
     setInbetningEnabled(v); await saveKey('inbetningEnabled', v)
   }
+  async function setHagarEnabledSave(v) {
+    setHagarEnabled(v); await saveKey('hagarEnabled', v)
+  }
+  async function toggleHagarHorse(hage, horse) {
+    const key = String(hage)
+    const current = hagarAssignments[key] || []
+    const next = current.includes(horse) ? current.filter(h => h !== horse) : [...current, horse]
+    const updated = { ...hagarAssignments, [key]: next }
+    setHagarAssignments(updated); await saveKey('hagarAssignments', updated)
+  }
 
   async function submitStro() {
     if (!sForm.horse) return
@@ -722,13 +738,14 @@ export default function StableApp({ session, role, onSignOut }) {
     { id:'dagbok',    label:'Dagbok',      icon:'📓' },
     { id:'paddock',   label:'Paddock',     icon:'🏟️' },
     { id:'inbetning', label:'Inbetningshagar', icon:'🌲', requireInbetning: true },
+    { id:'hagar',     label:'Hagar',       icon:'🐴', requireHagar: true },
     { id:'foder',     label:foderLabel,    icon:'🍽️' },
     { id:'stro',      label:'Strö',        icon:'📦' },
     { id:'ho',        label:'Hö',          icon:'🌾' },
     { id:'info',      label:'Info',        icon:'ℹ️', notAdmin: true },
     { id:'settings',  label:'Inställning', icon:'⚙️', adminOnly: true },
     { id:'export',    label:'Export',      icon:'📊', adminOnly: true },
-  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare) && (!t.notAdmin || !isAdmin) && (!t.requireInbetning || inbetningEnabled))
+  ].filter(t => (!t.adminOnly || isAdmin) && (!t.notInackordering || isAdmin || isRyttare) && (!t.notAdmin || !isAdmin) && (!t.requireInbetning || inbetningEnabled) && (!t.requireHagar || hagarEnabled))
 
 
   if (loadingData) return (
@@ -1324,7 +1341,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} />
+          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1456,6 +1473,44 @@ export default function StableApp({ session, role, onSignOut }) {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {tab === 'hagar' && hagarEnabled && (
+          <div>
+            <SectionTitle icon="🐴" title="Hagar" sub={isAdmin ? 'Tilldela hästar till hage 1–14' : 'Översikt över hästar i respektive hage'} />
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20, background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 14 : 22 }}>
+              <div>
+                <img src={hagarSkiss} alt="Skiss över hagar 1-14" style={{ width:'100%', height:'auto', display:'block', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {Array.from({ length: 14 }, (_, i) => i + 1).map(hage => {
+                  const key = String(hage)
+                  const assigned = hagarAssignments[key] || []
+                  return (
+                    <div key={hage} style={{ border:'1px solid '+C.parchment, borderRadius:8, padding:10, background:C.cream }}>
+                      <div style={{ fontWeight:'bold', color:C.bark, marginBottom:6, fontFamily:'Georgia,serif' }}>Hage {hage}</div>
+                      {isAdmin ? (
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                          {visibleHorseNames.map(h => {
+                            const on = assigned.includes(h)
+                            return (
+                              <button key={h} onClick={() => toggleHagarHorse(hage, h)} style={{ fontSize:'0.78rem', padding:'4px 10px', borderRadius:14, border:'1px solid '+(on ? C.moss : C.parchment), background: on ? C.moss : '#fff', color: on ? '#fff' : C.bark, cursor:'pointer', fontWeight: on ? 'bold' : 'normal' }}>
+                                {on ? '✓ ' : ''}{h}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:'0.85rem', color: assigned.length ? C.bark : C.muted }}>
+                          {assigned.length ? assigned.join(', ') : '— inga hästar —'}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -2171,7 +2226,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   )
 }
 
-function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled }) {
+function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
@@ -2237,6 +2292,14 @@ function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, set
             <div style={{ fontSize:'0.75rem', color:C.muted, marginTop:2 }}>Visar fliken där 4 inbetningshagar kan bokas i 30-min intervall (7–20).</div>
           </div>
           <span style={{ fontSize:'0.7rem', fontWeight:'bold', color: inbetningEnabled ? '#4a6741' : '#9a8a6a', background: inbetningEnabled ? '#e8f5e8' : '#f0ece0', padding:'4px 10px', borderRadius:6 }}>{inbetningEnabled ? 'Aktiverad' : 'Inaktiv'}</span>
+        </label>
+        <label style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:C.cream, borderRadius:10, border:'1px dashed '+C.straw, cursor:'pointer', marginTop:10 }}>
+          <input type="checkbox" checked={!!hagarEnabled} onChange={e => setHagarEnabled && setHagarEnabled(e.target.checked)} style={{ width:20, height:20, cursor:'pointer' }} />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:'0.95rem', fontWeight:'bold', color:C.bark }}>🐴 Hagar</div>
+            <div style={{ fontSize:'0.75rem', color:C.muted, marginTop:2 }}>Visar fliken med hagskiss där hästar kan tilldelas hage 1–14.</div>
+          </div>
+          <span style={{ fontSize:'0.7rem', fontWeight:'bold', color: hagarEnabled ? '#4a6741' : '#9a8a6a', background: hagarEnabled ? '#e8f5e8' : '#f0ece0', padding:'4px 10px', borderRadius:6 }}>{hagarEnabled ? 'Aktiverad' : 'Inaktiv'}</span>
         </label>
       </div>
 
