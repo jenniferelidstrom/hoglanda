@@ -2067,8 +2067,8 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
     const monthIdx = parseInt(fromDate.substring(5,7), 10) - 1
     const monthName = MONTHS_SV[monthIdx] || ''
     rows.push(['Sammanfattning', monthName, '', 'Pris/st', 'Totalt'])
+    const firstSummaryRow = rows.length + 1 // 1-indexerad rad för första värdesraden under rubriken (kolumn E)
 
-    let total = 0
     const summaryItems = [
       { key:'Stallströ',    label:'Stallströ totalt',    unit:'balar',  source:stroByHorse },
       { key:'Stallpellets', label:'Stallpellets totalt', unit:'säckar', source:stroByHorse },
@@ -2080,20 +2080,19 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
       if (!qty) return
       const price = EXPORT_PRICES[key]
       const sum = qty * price
-      total += sum
       rows.push([label, fmtSv(qty), unit, fmtSv(price), fmtSv(sum)])
     })
 
     if (MOCKNING_HORSES.includes(horse)) {
       const qty = 1, price = EXPORT_PRICES['Mockning'], sum = qty * price
-      total += sum
       rows.push(['Mockning', qty, '', fmtSv(price), fmtSv(sum)])
     }
 
     rows.push(['Veterinär', '', '', '', ''])
     rows.push(['Övrigt', '', '', '', ''])
     rows.push(['', '', '', '', ''])
-    rows.push(['Total:', '', '', '', fmtSv(total)])
+    const lastSummaryRow = rows.length // tomraden precis ovanför Total
+    rows.push(['Total:', '', '', '', '=SUM(E' + firstSummaryRow + ':E' + lastSummaryRow + ')'])
 
     exportSemicolonCSV(rows, horse + '-forbrukning-' + fromDate + '-' + toDate + '.csv')
   }
