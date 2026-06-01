@@ -2171,7 +2171,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
                       <tr key={i} style={{ background: i%2===0 ? '#fff' : C.cream, borderBottom:'1px solid '+C.parchment }}>
                         <td style={{ padding:'8px 12px', fontSize:'0.85rem', color:C.bark }}>{l.date}</td>
                         <td style={{ padding:'8px 12px', fontSize:'0.85rem', color:C.bark }}>{l.item}</td>
-                        <td style={{ padding:'8px 12px', textAlign:'right', fontWeight:'bold', fontSize:'0.88rem', color:C.bark }}>{l.amount}</td>
+                        <td style={{ padding:'8px 12px', textAlign:'right', fontWeight:'bold', fontSize:'0.88rem', color:C.bark }}>{r2(l.amount)}</td>
                         <td style={{ padding:'8px 12px', fontSize:'0.85rem', color:C.muted }}>{l.unit}</td>
                         <td style={{ padding:'8px 12px', fontSize:'0.85rem', color:C.muted }}>{l.name}</td>
                       </tr>
