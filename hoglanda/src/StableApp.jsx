@@ -1379,7 +1379,7 @@ export default function StableApp({ session, role, onSignOut }) {
         )}
 
         {tab === 'export' && isAdmin && (
-          <ExportTab stroLog={stroLog} hoLog={hoLog} isMobile={isMobile} userId={userId} />
+          <ExportTab stroLog={stroLog} hoLog={hoLog} isMobile={isMobile} userId={userId} horseConfig={horseConfig} />
         )}
 
         {tab === 'info' && (
@@ -1512,7 +1512,7 @@ export default function StableApp({ session, role, onSignOut }) {
 
         {tab === 'hagar' && hagarEnabled && (
           <div>
-            <SectionTitle icon="🐴" title="Hagar" sub={isAdmin ? 'Välj en eller flera hästar per hage i dropdownen' : 'Översikt över hästar i respektive hage'} />
+            <SectionTitle icon="🐴" title="Hagar" sub={isAdmin ? 'Välj en eller flera hästar per hage i dropdownen' : 'Översikt över hästar i respektive hage. Hagnummer för varje hage är placerad där ingången till hagen finns.'} />
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20, background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 14 : 22 }}>
               <div>
                 <img src={hagarSkiss} alt="Skiss över hagar 1-14" style={{ width:'100%', height:'auto', display:'block', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
@@ -1933,7 +1933,7 @@ function DagbokForm({ initRyttare, initVad, initKandes, initOvrigt, onSave, isUp
   )
 }
 
-function ExportTab({ stroLog, hoLog, isMobile, userId }) {
+function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date(); d.setDate(1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
   })
@@ -2013,7 +2013,8 @@ function ExportTab({ stroLog, hoLog, isMobile, userId }) {
   const stroByHorse = {}, hoByHorse = {}
   stro.forEach(l => { const h = l.horse || 'Okänd'; stroByHorse[h] = stroByHorse[h] || {}; stroByHorse[h][l.item] = (stroByHorse[h][l.item] || 0) + l.amount })
   ho.forEach(l => { const h = l.horse || 'Okänd'; hoByHorse[h] = hoByHorse[h] || {}; hoByHorse[h][l.item] = (hoByHorse[h][l.item] || 0) + l.amount })
-  const allHorses = [...new Set([...Object.keys(stroByHorse), ...Object.keys(hoByHorse)])].sort((a,b) => a.localeCompare(b, 'sv'))
+  const activeForPeriod = (horseConfig || []).filter(h => (!h.from || h.from <= toDate) && (!h.to || h.to >= fromDate)).map(h => h.name)
+  const allHorses = [...new Set([...activeForPeriod, ...Object.keys(stroByHorse), ...Object.keys(hoByHorse)])].sort((a,b) => a.localeCompare(b, 'sv'))
   const horseDetail = selectedHorse ? [
     ...stro.filter(l => (l.horse||'Okänd') === selectedHorse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit: l.item==='Stallströ' ? 'balar' : 'säckar' })),
     ...ho.filter(l => (l.horse||'Okänd') === selectedHorse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit:'kg' }))
