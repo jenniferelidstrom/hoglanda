@@ -1706,8 +1706,8 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
   const monthPrefix = hoMonth.year + '-' + String(hoMonth.month + 1).padStart(2, '0')
   const monthFiltered = hoLog.filter(l => l.date && l.date.startsWith(monthPrefix))
   const filtered = isAdmin && filterHorses.length > 0 ? monthFiltered.filter(l => filterHorses.includes(l.horse)) : monthFiltered
-  const hoTotal = filtered.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0)
-  const halmTotal = filtered.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0)
+  const hoTotal = r2(filtered.filter(l => l.item === 'Hö').reduce((s, l) => s + l.amount, 0))
+  const halmTotal = r2(filtered.filter(l => l.item === 'Halm').reduce((s, l) => s + l.amount, 0))
   return (
     <div>
       <SectionTitle icon="🌾" title="Hö & Halm" sub={isAdmin ? 'Admin ser alla loggar' : 'Du ser bara dina egna loggar'} />
@@ -2024,7 +2024,13 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
       openingBalance = prevIn - prevUsed - prevAdj
     }
 
-    return { totalIn, totalUsed, totalAdjusted, openingBalance, balance: openingBalance + totalIn - totalUsed - totalAdjusted }
+    return {
+      totalIn: r2(totalIn),
+      totalUsed: r2(totalUsed),
+      totalAdjusted: r2(totalAdjusted),
+      openingBalance: r2(openingBalance),
+      balance: r2(openingBalance + totalIn - totalUsed - totalAdjusted),
+    }
   }
 
   function filterByDate(log) { return log.filter(l => l.date >= fromDate && l.date <= toDate) }
@@ -2032,6 +2038,8 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
   const stroByHorse = {}, hoByHorse = {}
   stro.forEach(l => { const h = l.horse || 'Okänd'; stroByHorse[h] = stroByHorse[h] || {}; stroByHorse[h][l.item] = (stroByHorse[h][l.item] || 0) + l.amount })
   ho.forEach(l => { const h = l.horse || 'Okänd'; hoByHorse[h] = hoByHorse[h] || {}; hoByHorse[h][l.item] = (hoByHorse[h][l.item] || 0) + l.amount })
+  Object.values(stroByHorse).forEach(items => Object.keys(items).forEach(k => { items[k] = r2(items[k]) }))
+  Object.values(hoByHorse).forEach(items => Object.keys(items).forEach(k => { items[k] = r2(items[k]) }))
   const activeForPeriod = (horseConfig || []).filter(h => (!h.from || h.from <= toDate) && (!h.to || h.to >= fromDate)).map(h => h.name)
   const allHorses = [...new Set([...activeForPeriod, ...Object.keys(stroByHorse), ...Object.keys(hoByHorse)])].sort((a,b) => a.localeCompare(b, 'sv'))
   const horseDetail = selectedHorse ? [
