@@ -8,6 +8,8 @@ const C = {
   straw:'#c8a96e', cream:'#f7f2e8', parchment:'#ede6d3',
   earth:'#8b6347', bark:'#3d2b1a', gold:'#c49a2a', muted:'#9a8a6a',
 }
+
+const r2 = (n) => Math.round((Number(n)||0) * 100) / 100
 const PASS = ['Utsläpp','Lunchfodring','Gå med Stella','Lägga in middag','Göra ny middag','Insläpp','Kvällsfodring']
 const PASS_ICONS = ['🌅','🥕','🚶','🍽️','🔄','🏠','🌙']
 const ADMIN_ONLY_PASS = ['Gå med Stella','Lägga in middag','Göra ny middag']
@@ -1838,7 +1840,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
       <div style={{ display:'flex', gap:12, marginBottom:14, flexWrap:'wrap' }}>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:'0.78rem', color:C.muted }}>🌾 Hö:</span>
-          <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{hoTotal} kg</span>
+          <span style={{ fontWeight:'bold', color:C.bark, fontSize:'1rem' }}>{r2(hoTotal)} kg</span>
         </div>
         <div style={{ background:'#fff', borderRadius:10, padding:'10px 16px', border:'1.5px solid '+C.parchment, display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:'0.78rem', color:C.muted }}>🌿 Halm:</span>
@@ -1877,7 +1879,7 @@ function HoTab({ isAdmin, isMobile, hoLog, hoForm, setHoForm, hoOk, hoEditId, se
                   <div style={{ fontSize:'0.72rem', color:C.muted, marginTop:2 }}>{l.date}</div>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:'1rem', fontWeight:'bold', color:C.earth }}>{l.amount} kg</span>
+                  <span style={{ fontSize:'1rem', fontWeight:'bold', color:C.earth }}>{r2(l.amount)} kg</span>
                   <button onClick={() => { setHoEditId(l.id); setHoEditData({ item:l.item, amount:l.amount, date:l.date, horse:l.horse||'' }) }} style={{ background:C.parchment, border:'none', borderRadius:7, width:36, height:36, cursor:'pointer', fontSize:'0.9rem' }}>✏️</button>
                   {isAdmin && <button onClick={() => deleteHo(l.id)} style={{ background:'#fce8e8', border:'none', borderRadius:7, width:36, height:36, cursor:'pointer', fontSize:'0.9rem' }}>🗑️</button>}
                 </div>
@@ -2022,7 +2024,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
 
   function exportTotalCSV() {
     const rows = [['Häst','Stallströ (balar)','Stallpellets (säckar)','Hö (kg)','Halm (kg)']]
-    allHorses.forEach(horse => rows.push([horse, stroByHorse[horse]?.['Stallströ']||0, stroByHorse[horse]?.['Stallpellets']||0, hoByHorse[horse]?.['Hö']||0, hoByHorse[horse]?.['Halm']||0]))
+    allHorses.forEach(horse => rows.push([horse, stroByHorse[horse]?.['Stallströ']||0, stroByHorse[horse]?.['Stallpellets']||0, r2(hoByHorse[horse]?.['Hö']||0), r2(hoByHorse[horse]?.['Halm']||0)]))
     exportCSV(rows, 'total-forbrukning-' + fromDate + '-' + toDate + '.csv')
   }
   function exportHorseDetailCSV(horse) {
@@ -2033,8 +2035,8 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
     rows.push([]); rows.push(['Sammanfattning'])
     if (stroByHorse[horse]?.['Stallströ']) rows.push(['Stallströ totalt', stroByHorse[horse]['Stallströ'], 'balar'])
     if (stroByHorse[horse]?.['Stallpellets']) rows.push(['Stallpellets totalt', stroByHorse[horse]['Stallpellets'], 'säckar'])
-    if (hoByHorse[horse]?.['Hö']) rows.push(['Hö totalt', hoByHorse[horse]['Hö'], 'kg'])
-    if (hoByHorse[horse]?.['Halm']) rows.push(['Halm totalt', hoByHorse[horse]['Halm'], 'kg'])
+    if (hoByHorse[horse]?.['Hö']) rows.push(['Hö totalt', r2(hoByHorse[horse]['Hö']), 'kg'])
+    if (hoByHorse[horse]?.['Halm']) rows.push(['Halm totalt', r2(hoByHorse[horse]['Halm']), 'kg'])
     exportCSV(rows, horse + '-forbrukning-' + fromDate + '-' + toDate + '.csv')
   }
 
@@ -2077,16 +2079,16 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
                       <td style={{ padding:'10px 12px', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>🐴 {horse} {selectedHorse === horse ? '▾' : '▸'}</td>
                       <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{stroByHorse[horse]?.['Stallströ'] || '—'}</td>
                       <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{stroByHorse[horse]?.['Stallpellets'] || '—'}</td>
-                      <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{hoByHorse[horse]?.['Hö'] || '—'}</td>
-                      <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{hoByHorse[horse]?.['Halm'] || '—'}</td>
+                      <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{hoByHorse[horse]?.['Hö'] ? r2(hoByHorse[horse]['Hö']) : '—'}</td>
+                      <td style={{ padding:'10px 12px', textAlign:'right', color:C.earth, fontSize:'0.88rem' }}>{hoByHorse[horse]?.['Halm'] ? r2(hoByHorse[horse]['Halm']) : '—'}</td>
                     </tr>
                   ))}
                   <tr style={{ background:C.parchment, borderTop:'2px solid '+C.bark }}>
                     <td style={{ padding:'10px 12px', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>Totalt</td>
                     <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{allHorses.reduce((s,h) => s + (stroByHorse[h]?.['Stallströ']||0), 0) || '—'}</td>
                     <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{allHorses.reduce((s,h) => s + (stroByHorse[h]?.['Stallpellets']||0), 0) || '—'}</td>
-                    <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{allHorses.reduce((s,h) => s + (hoByHorse[h]?.['Hö']||0), 0) || '—'}</td>
-                    <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{allHorses.reduce((s,h) => s + (hoByHorse[h]?.['Halm']||0), 0) || '—'}</td>
+                    <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{r2(allHorses.reduce((s,h) => s + (hoByHorse[h]?.['Hö']||0), 0)) || '—'}</td>
+                    <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:'bold', color:C.bark, fontSize:'0.88rem' }}>{r2(allHorses.reduce((s,h) => s + (hoByHorse[h]?.['Halm']||0), 0)) || '—'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -2105,8 +2107,8 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
             <div style={{ display:'flex', gap:10, marginBottom:14, flexWrap:'wrap' }}>
               {stroByHorse[selectedHorse]?.['Stallströ'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>🌿 Stallströ: </span><span style={{ fontWeight:'bold', color:C.bark }}>{stroByHorse[selectedHorse]['Stallströ']} balar</span></div>}
               {stroByHorse[selectedHorse]?.['Stallpellets'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>⚪ Stallpellets: </span><span style={{ fontWeight:'bold', color:C.bark }}>{stroByHorse[selectedHorse]['Stallpellets']} säckar</span></div>}
-              {hoByHorse[selectedHorse]?.['Hö'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>🌾 Hö: </span><span style={{ fontWeight:'bold', color:C.bark }}>{hoByHorse[selectedHorse]['Hö']} kg</span></div>}
-              {hoByHorse[selectedHorse]?.['Halm'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>🟡 Halm: </span><span style={{ fontWeight:'bold', color:C.bark }}>{hoByHorse[selectedHorse]['Halm']} kg</span></div>}
+              {hoByHorse[selectedHorse]?.['Hö'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>🌾 Hö: </span><span style={{ fontWeight:'bold', color:C.bark }}>{r2(hoByHorse[selectedHorse]['Hö'])} kg</span></div>}
+              {hoByHorse[selectedHorse]?.['Halm'] && <div style={{ background:C.cream, borderRadius:8, padding:'8px 14px', border:'1px solid '+C.parchment }}><span style={{ fontSize:'0.72rem', color:C.muted }}>🟡 Halm: </span><span style={{ fontWeight:'bold', color:C.bark }}>{r2(hoByHorse[selectedHorse]['Halm'])} kg</span></div>}
             </div>
             {horseDetail.length === 0 ? <p style={{ color:C.muted, fontStyle:'italic', fontSize:'0.85rem' }}>Inga poster under vald period.</p> : (
               <div style={{ overflowX:'auto' }}>
