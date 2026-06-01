@@ -191,6 +191,23 @@ function exportCSV(rows, filename) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click()
 }
 
+const MOCKNING_HORSES = ['Celma', 'Selma']
+const EXPORT_PRICES = { 'Stallströ': 145, 'Stallpellets': 119, 'Hö': 7.5, 'Halm': 5.95, 'Mockning': 350 }
+
+function fmtSv(n, decimals = 2) {
+  if (n == null || isNaN(n)) return ''
+  const fixed = (Math.round(n * 100) / 100).toFixed(decimals).replace(/\.?0+$/, '')
+  const [int, dec] = fixed.split('.')
+  const intSpaced = int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return dec ? intSpaced + ',' + dec : intSpaced
+}
+
+function exportSemicolonCSV(rows, filename) {
+  const csv = rows.map(r => r.map(c => c == null ? '' : String(c)).join(';')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click()
+}
+
 const inp = { width:'100%', padding:'11px 13px', borderRadius:8, border:'1.5px solid '+C.parchment, fontSize:'1rem', fontFamily:'Georgia,serif', color:C.bark, background:C.cream, outline:'none' }
 
 function SectionTitle({ icon, title, sub }) {
@@ -2028,16 +2045,49 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
     exportCSV(rows, 'total-forbrukning-' + fromDate + '-' + toDate + '.csv')
   }
   function exportHorseDetailCSV(horse) {
-    const detail = [...stro.filter(l => (l.horse||'Okänd') === horse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit: l.item==='Stallströ' ? 'balar' : 'säckar' })),
-      ...ho.filter(l => (l.horse||'Okänd') === horse).map(l => ({ date:l.date, name:l.name, item:l.item, amount:l.amount, unit:'kg' }))].sort((a,b) => a.date.localeCompare(b.date))
-    const rows = [['Datum','Produkt','Antal','Enhet','Registrerad av']]
-    detail.forEach(l => rows.push([l.date, l.item, l.amount, l.unit, l.name]))
-    rows.push([]); rows.push(['Sammanfattning'])
-    if (stroByHorse[horse]?.['Stallströ']) rows.push(['Stallströ totalt', stroByHorse[horse]['Stallströ'], 'balar'])
-    if (stroByHorse[horse]?.['Stallpellets']) rows.push(['Stallpellets totalt', stroByHorse[horse]['Stallpellets'], 'säckar'])
-    if (hoByHorse[horse]?.['Hö']) rows.push(['Hö totalt', r2(hoByHorse[horse]['Hö']), 'kg'])
-    if (hoByHorse[horse]?.['Halm']) rows.push(['Halm totalt', r2(hoByHorse[horse]['Halm']), 'kg'])
-    exportCSV(rows, horse + '-forbrukning-' + fromDate + '-' + toDate + '.csv')
+    const detail = [
+      ...stro.filter(l => (l.horse||'Okänd') === horse).map(l => ({ date:l.date, item:l.item, amount:l.amount, unit: l.item==='Stallströ' ? 'balar' : 'säckar' })),
+      ...ho.filter(l => (l.horse||'Okänd') === horse).map(l => ({ date:l.date, item:l.item, amount:l.amount, unit:'kg' }))
+    ].sort((a,b) => a.date.localeCompare(b.date))
+
+    const rows = []
+    rows.push(['Häst:', horse, '', '', ''])
+    rows.push(['Datum', 'Produkt', 'Antal', 'Enhet', ''])
+    detail.forEach(l => rows.push([l.date, l.item, fmtSv(l.amount), l.unit, '']))
+    rows.push(['', '', '', '', ''])
+
+    const monthIdx = parseInt(fromDate.substring(5,7), 10) - 1
+    const monthName = MONTHS_SV[monthIdx] || ''
+    rows.push(['Sammanfattning', monthName, '', 'Pris/st', 'Totalt'])
+
+    let total = 0
+    const summaryItems = [
+      { key:'Stallströ',    label:'Stallströ totalt',    unit:'balar',  source:stroByHorse },
+      { key:'Stallpellets', label:'Stallpellets totalt', unit:'säckar', source:stroByHorse },
+      { key:'Hö',           label:'Hö totalt',           unit:'kg',     source:hoByHorse },
+      { key:'Halm',         label:'Halm totalt',         unit:'kg',     source:hoByHorse },
+    ]
+    summaryItems.forEach(({ key, label, unit, source }) => {
+      const qty = source[horse]?.[key] || 0
+      if (!qty) return
+      const price = EXPORT_PRICES[key]
+      const sum = qty * price
+      total += sum
+      rows.push([label, fmtSv(qty), unit, fmtSv(price), fmtSv(sum)])
+    })
+
+    if (MOCKNING_HORSES.includes(horse)) {
+      const qty = 1, price = EXPORT_PRICES['Mockning'], sum = qty * price
+      total += sum
+      rows.push(['Mockning', qty, '', fmtSv(price), fmtSv(sum)])
+    }
+
+    rows.push(['Veterinär', '', '', '', ''])
+    rows.push(['Övrigt', '', '', '', ''])
+    rows.push(['', '', '', '', ''])
+    rows.push(['Total:', '', '', '', fmtSv(total)])
+
+    exportSemicolonCSV(rows, horse + '-forbrukning-' + fromDate + '-' + toDate + '.csv')
   }
 
   const btnStyle = { padding:'13px 20px', borderRadius:9, border:'none', color:'#fff', fontFamily:'Georgia,serif', fontSize:'0.92rem', fontWeight:'bold', cursor:'pointer' }
