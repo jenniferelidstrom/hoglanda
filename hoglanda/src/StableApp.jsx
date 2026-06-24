@@ -13,6 +13,13 @@ const r2 = (n) => Math.round((Number(n)||0) * 100) / 100
 const PASS = ['Utsläpp','Lunchfodring','Gå med Stella','Lägga in middag','Göra ny middag','Insläpp','Kvällsfodring']
 const PASS_ICONS = ['🌅','🥕','🚶','🍽️','🔄','🏠','🌙']
 const ADMIN_ONLY_PASS = ['Gå med Stella','Lägga in middag','Göra ny middag']
+const PASS_SUMMER = ['Utsläpp','Lunchfodring','Gå med Stella','Flytta hästarna till grus','Insläpp och Kvällsfodring']
+const PASS_SUMMER_ICONS = ['🌅','🥕','🚶','🪨','🌙']
+const ADMIN_ONLY_PASS_SUMMER = ['Gå med Stella','Flytta hästarna till grus']
+const SCHEMA_SEASONS = {
+  vinter: { label:'Vinter ❄️', pass: PASS,        icons: PASS_ICONS,        adminOnly: ADMIN_ONLY_PASS,        timePass:'Insläpp',                   timeKey:'Insläpp_tid' },
+  sommar: { label:'Sommar ☀️', pass: PASS_SUMMER, icons: PASS_SUMMER_ICONS, adminOnly: ADMIN_ONLY_PASS_SUMMER, timePass:'Insläpp och Kvällsfodring', timeKey:'InslappKvall_tid' },
+}
 const DAGAR = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag']
 const DAGAR_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön']
 const PERSONER = ['Lars','Agneta','Jennifer','Linnea']
@@ -60,7 +67,7 @@ const INITIAL_HORSES = [
   { name:'Spot',    riders:[] },
   { name:'Spotty',  riders:[] },
 ]
-const ACTIVITY_HORSE_ORDER = ['Hippo','Charina','Calle','Joker','Maggan','Skye','Storm','Lova','Celma','Selma','Spot','Spotty']
+const ACTIVITY_HORSE_ORDER = ['Hippo','Charina','Calle','Joker','Skye','Maggan','Dazzler','Storm','Mini','Sune','Lova','Celma','Fafnir','Selma','Spotty']
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(window.innerWidth < 640)
@@ -350,6 +357,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const thisMonday = getMonday(stockholmNowDate())
   const thisWeekKey = weekKey(thisMonday)
   const [schedMonday, setSchedMonday] = useState(thisMonday)
+  const [schemaSeason, setSchemaSeason] = useState('vinter')
   const [allScheds, setAllScheds] = useState({ [thisWeekKey]: defaultSchedule() })
   const [openCell, setOpenCell] = useState(null)
   const todayIdx = DAGAR.indexOf(TODAY)
@@ -357,6 +365,12 @@ export default function StableApp({ session, role, onSignOut }) {
   const schedKey = weekKey(schedMonday)
   const sched = allScheds[schedKey] || defaultSchedule()
   const isThisWeek = schedKey === thisWeekKey
+  const schemaSeasonCfg = SCHEMA_SEASONS[schemaSeason] || SCHEMA_SEASONS.vinter
+  const schemaPass = schemaSeasonCfg.pass
+  const schemaPassIcons = schemaSeasonCfg.icons
+  const schemaAdminOnly = schemaSeasonCfg.adminOnly
+  const schemaTimePass = schemaSeasonCfg.timePass
+  const schemaTimeKey = schemaSeasonCfg.timeKey
 
   const [actOffset, setActOffset] = useState(0)
   const actMonday = (() => { const d = new Date(thisMonday); d.setDate(d.getDate() + actOffset*7); return d })()
@@ -376,7 +390,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const [allInbetning, setAllInbetning] = useState({}) // { 'YYYY-MM': { 'YYYY-MM-DD': { '<hage>|<slot>': { name, userId, groupId } } } }
   const inbMK = monthKey(inbetningMonth.year, inbetningMonth.month)
   const inbetningGrid = allInbetning[inbMK] || {}
-  // ---- Hagar (1-14) ----
+  // ---- Hagar (1-16) ----
   const [hagarEnabled, setHagarEnabled] = useState(false)
   const [hagarAssignments, setHagarAssignments] = useState({}) // { '1': ['HästA','HästB'], ... }
   const [inbSelection, setInbSelection] = useState(new Set()) // 'date|hage|slot'
@@ -439,6 +453,7 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'riderConfig') setRiderConfig(row.value)
       if (row.key === 'foderState') setFoderState(row.value)
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
+      if (row.key === 'schemaSeason') setSchemaSeason(row.value === 'sommar' ? 'sommar' : 'vinter')
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
       if (row.key === 'allInbetning') setAllInbetning(row.value || {})
@@ -488,10 +503,13 @@ export default function StableApp({ session, role, onSignOut }) {
     const ns = { ...allScheds, [schedKey]: { ...week, [dag]: { ...week[dag], [pass]: next } } }
     setAllScheds(ns); await saveKey('allScheds', ns)
   }
-  async function updateInslappTid(dag, tid) {
+  async function updateInslappTid(dag, tid, timeKey = 'Insläpp_tid') {
     const week = allScheds[schedKey] || emptySchedule()
-    const ns = { ...allScheds, [schedKey]: { ...week, [dag]: { ...week[dag], Insläpp_tid: tid } } }
+    const ns = { ...allScheds, [schedKey]: { ...week, [dag]: { ...week[dag], [timeKey]: tid } } }
     setAllScheds(ns); await saveKey('allScheds', ns)
+  }
+  async function setSchemaSeasonSave(s) {
+    setSchemaSeason(s); await saveKey('schemaSeason', s)
   }
 
   function goActWeek(d) {
@@ -865,6 +883,22 @@ export default function StableApp({ session, role, onSignOut }) {
         {tab === 'schema' && (
           <div>
             <SectionTitle icon="📅" title="Veckoschema" sub={isAdmin ? 'Klicka en cell för att välja ansvariga' : 'Skrivskyddat'} />
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+              <span style={{ fontSize:'0.8rem', color:C.muted, fontWeight:'bold' }}>Säsong:</span>
+              <div style={{ display:'inline-flex', background:C.parchment, borderRadius:9, padding:3, gap:3 }}>
+                {Object.keys(SCHEMA_SEASONS).map(key => {
+                  const active = schemaSeason === key
+                  return (
+                    <button key={key} onClick={() => { if (isAdmin) setSchemaSeasonSave(key) }} disabled={!isAdmin}
+                      style={{ padding:'6px 16px', borderRadius:7, border:'none', cursor: isAdmin ? 'pointer' : 'default',
+                        background: active ? C.forest : 'transparent', color: active ? C.straw : C.bark,
+                        fontFamily:'Georgia,serif', fontWeight: active ? 'bold' : 'normal', fontSize:'0.8rem', opacity: (!isAdmin && !active) ? 0.5 : 1 }}>
+                      {SCHEMA_SEASONS[key].label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <WeekNav info={weekLabel(schedMonday)} isNow={isThisWeek} onPrev={() => goSchedWeek(-1)} onNext={() => goSchedWeek(1)} />
             {isMobile ? (
               <div>
@@ -880,15 +914,15 @@ export default function StableApp({ session, role, onSignOut }) {
                   })}
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-                  {PASS.map((pass, pi) => {
-                    if (!isAdmin && ADMIN_ONLY_PASS.includes(pass)) return null
+                  {schemaPass.map((pass, pi) => {
+                    if (!isAdmin && schemaAdminOnly.includes(pass)) return null
                     const dag = DAGAR[schedDayIdx]
                     const val = sched[dag]?.[pass] || []
                     const ck = dag+'|'+pass; const isOpen = openCell === ck
                     return (
                       <div key={pass} style={{ background:'#fff', borderRadius:10, border:'1.5px solid '+(val.length ? C.straw : C.parchment), position:'relative' }}>
                         <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 15px', background:'transparent', border:'none', cursor: isAdmin ? 'pointer' : 'default', fontFamily:'Georgia,serif', outline:'none' }}>
-                          <span style={{ fontSize:'0.9rem', fontWeight:'bold', color:C.bark }}>{PASS_ICONS[pi]} {pass}</span>
+                          <span style={{ fontSize:'0.9rem', fontWeight:'bold', color:C.bark }}>{schemaPassIcons[pi]} {pass}</span>
                           <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', maxWidth:'55%' }}>
                             {val.length === 0
                               ? <span style={{ fontSize:'0.78rem', color:C.muted, fontStyle:'italic' }}>—</span>
@@ -896,9 +930,9 @@ export default function StableApp({ session, role, onSignOut }) {
                             }
                           </div>
                         </button>
-                        {pass === 'Insläpp' && (
+                        {pass === schemaTimePass && (
                           <div style={{ padding:'0 15px 10px' }}>
-                            <input type="time" value={sched[dag]?.Insläpp_tid || ''} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.8rem', padding:'4px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%' }} disabled={!isAdmin} />
+                            <input type="time" value={sched[dag]?.[schemaTimeKey] || ''} onChange={e => updateInslappTid(dag, e.target.value, schemaTimeKey)} style={{ fontFamily:'Georgia,serif', fontSize:'0.8rem', padding:'4px 8px', borderRadius:6, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%' }} disabled={!isAdmin} />
                           </div>
                         )}
                         {isOpen && isAdmin && (
@@ -934,13 +968,13 @@ export default function StableApp({ session, role, onSignOut }) {
                   </thead>
                   <tbody>
                     {(() => {
-                      const visiblePasses = PASS.filter(p => isAdmin || !ADMIN_ONLY_PASS.includes(p));
+                      const visiblePasses = schemaPass.filter(p => isAdmin || !schemaAdminOnly.includes(p));
                       return visiblePasses.map((pass, vi) => {
-                        const pi = PASS.indexOf(pass);
+                        const pi = schemaPass.indexOf(pass);
                         const isBottomRow = vi >= visiblePasses.length - 4;
                         return (
                           <tr key={pass}>
-                            <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{PASS_ICONS[pi]} {pass}</td>
+                            <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{schemaPassIcons[pi]} {pass}</td>
                             {DAGAR.map(dag => {
                               const val = sched[dag]?.[pass] || [];
                               const highlight = isThisWeek && dag === TODAY;
@@ -951,7 +985,7 @@ export default function StableApp({ session, role, onSignOut }) {
                                     <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', minHeight:32, padding:'3px', borderRadius:6, fontFamily:'Georgia,serif', border:'1.5px solid '+(highlight ? C.moss : val.length ? C.straw : C.parchment), background: highlight ? '#f0f7ee' : val.length ? '#fffaf0' : '#fff', cursor: isAdmin ? 'pointer' : 'default', outline:'none', display:'flex', flexWrap:'wrap', gap:2, alignItems:'center', justifyContent:'center' }}>
                                       {val.length === 0 ? <span style={{ fontSize:'0.6rem', color:C.muted }}>—</span> : val.map(p => <span key={p} style={{ background:C.moss, color:'#fff', borderRadius:3, padding:'1px 5px', fontSize:'0.58rem', fontWeight:'bold' }}>{p}</span>)}
                                     </button>
-                                    {pass === 'Insläpp' && <input type="time" value={sched[dag]?.Insläpp_tid || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value)} style={{ fontFamily:'Georgia,serif', fontSize:'0.6rem', padding:'1px 3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} disabled={!isAdmin} />}
+                                    {pass === schemaTimePass && <input type="time" value={sched[dag]?.[schemaTimeKey] || ''} onClick={e => e.stopPropagation()} onChange={e => updateInslappTid(dag, e.target.value, schemaTimeKey)} style={{ fontFamily:'Georgia,serif', fontSize:'0.6rem', padding:'1px 3px', borderRadius:4, border:'1px solid '+C.parchment, background:C.cream, color:C.bark, width:'100%', textAlign:'center' }} disabled={!isAdmin} />}
                                   </div>
                                   {isOpen && isAdmin && (
                                     <div style={{ position:'absolute', [isBottomRow ? 'bottom' : 'top']:'calc(100% + 3px)', left:0, zIndex:50, background:'#fff', border:'1.5px solid '+C.straw, borderRadius:8, padding:'7px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)', minWidth:105 }}>
@@ -1534,10 +1568,10 @@ export default function StableApp({ session, role, onSignOut }) {
             <SectionTitle icon="🐴" title="Hagar" sub={isAdmin ? 'Välj en eller flera hästar per hage i dropdownen' : 'Översikt över hästar i respektive hage. Hagnummer för varje hage är placerad där ingången till hagen finns.'} />
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20, background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 14 : 22 }}>
               <div>
-                <img src={hagarSkiss} alt="Skiss över hagar 1-14" style={{ width:'100%', height:'auto', display:'block', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
+                <img src={hagarSkiss} alt="Skiss över hagar 1-16" style={{ width:'100%', height:'auto', display:'block', background:'#fafaf5', borderRadius:8, border:'1px solid '+C.parchment }} />
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {Array.from({ length: 14 }, (_, i) => i + 1).map(hage => {
+                {Array.from({ length: 16 }, (_, i) => i + 1).map(hage => {
                   const key = String(hage)
                   const assigned = hagarAssignments[key] || []
                   const myHorsesHere = userHorses ? assigned.filter(h => userHorses.includes(h)) : []
