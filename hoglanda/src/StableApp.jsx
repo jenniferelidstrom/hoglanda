@@ -13,12 +13,13 @@ const r2 = (n) => Math.round((Number(n)||0) * 100) / 100
 const PASS = ['Utsläpp','Lunchfodring','Gå med Stella','Lägga in middag','Göra ny middag','Insläpp','Kvällsfodring']
 const PASS_ICONS = ['🌅','🥕','🚶','🍽️','🔄','🏠','🌙']
 const ADMIN_ONLY_PASS = ['Gå med Stella','Lägga in middag','Göra ny middag']
-const PASS_SUMMER = ['Utsläpp','Lunchfodring','Gå med Stella','Flytta hästarna till grus','Insläpp och Kvällsfodring']
-const PASS_SUMMER_ICONS = ['🌅','🥕','🚶','🪨','🌙']
-const ADMIN_ONLY_PASS_SUMMER = ['Gå med Stella','Flytta hästarna till grus']
+const PASS_SUMMER = ['Utsläpp','Lunchfodring','Gå med Stella','Flytta hästarna till grus','Lägga in och göra ny mat','Insläpp_sommar']
+const PASS_SUMMER_ICONS = ['🌅','🥕','🚶','🪨','🍽️','🏠']
+const ADMIN_ONLY_PASS_SUMMER = ['Gå med Stella','Flytta hästarna till grus','Lägga in och göra ny mat']
+const PASS_SUMMER_LABELS = { 'Insläpp_sommar':'Insläpp' }
 const SCHEMA_SEASONS = {
-  vinter: { label:'Vinter ❄️', pass: PASS,        icons: PASS_ICONS,        adminOnly: ADMIN_ONLY_PASS,        timePass:'Insläpp',                   timeKey:'Insläpp_tid' },
-  sommar: { label:'Sommar ☀️', pass: PASS_SUMMER, icons: PASS_SUMMER_ICONS, adminOnly: ADMIN_ONLY_PASS_SUMMER, timePass:'Insläpp och Kvällsfodring', timeKey:'InslappKvall_tid' },
+  vinter: { label:'Vinter ❄️', pass: PASS,        icons: PASS_ICONS,        adminOnly: ADMIN_ONLY_PASS,        labels: {},                 timePass:'Insläpp',        timeKey:'Insläpp_tid' },
+  sommar: { label:'Sommar ☀️', pass: PASS_SUMMER, icons: PASS_SUMMER_ICONS, adminOnly: ADMIN_ONLY_PASS_SUMMER, labels: PASS_SUMMER_LABELS, timePass:'Insläpp_sommar', timeKey:'Insläpp_sommar_tid' },
 }
 const DAGAR = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag']
 const DAGAR_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön']
@@ -139,6 +140,7 @@ function defaultSchedule() {
   s['Torsdag']['Gå med Stella'] = ['Agneta']
   s['Fredag']['Gå med Stella'] = ['Lars']
   DAGAR.forEach(d => { s[d]['Kvällsfodring'] = ['Agneta','Linnea'] })
+  DAGAR.forEach(d => { s[d]['Insläpp_sommar'] = ['Linnea','Agneta'] })
   return s
 }
 function isWeekEmpty(week) {
@@ -371,6 +373,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const schemaAdminOnly = schemaSeasonCfg.adminOnly
   const schemaTimePass = schemaSeasonCfg.timePass
   const schemaTimeKey = schemaSeasonCfg.timeKey
+  const schemaLabels = schemaSeasonCfg.labels || {}
 
   const [actOffset, setActOffset] = useState(0)
   const actMonday = (() => { const d = new Date(thisMonday); d.setDate(d.getDate() + actOffset*7); return d })()
@@ -922,7 +925,7 @@ export default function StableApp({ session, role, onSignOut }) {
                     return (
                       <div key={pass} style={{ background:'#fff', borderRadius:10, border:'1.5px solid '+(val.length ? C.straw : C.parchment), position:'relative' }}>
                         <button onClick={() => isAdmin && setOpenCell(isOpen ? null : ck)} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 15px', background:'transparent', border:'none', cursor: isAdmin ? 'pointer' : 'default', fontFamily:'Georgia,serif', outline:'none' }}>
-                          <span style={{ fontSize:'0.9rem', fontWeight:'bold', color:C.bark }}>{schemaPassIcons[pi]} {pass}</span>
+                          <span style={{ fontSize:'0.9rem', fontWeight:'bold', color:C.bark }}>{schemaPassIcons[pi]} {schemaLabels[pass] || pass}</span>
                           <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', maxWidth:'55%' }}>
                             {val.length === 0
                               ? <span style={{ fontSize:'0.78rem', color:C.muted, fontStyle:'italic' }}>—</span>
@@ -974,7 +977,7 @@ export default function StableApp({ session, role, onSignOut }) {
                         const isBottomRow = vi >= visiblePasses.length - 4;
                         return (
                           <tr key={pass}>
-                            <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{schemaPassIcons[pi]} {pass}</td>
+                            <td style={{ fontSize:'0.75rem', fontWeight:'bold', color:C.bark, paddingRight:6, whiteSpace:'nowrap' }}>{schemaPassIcons[pi]} {schemaLabels[pass] || pass}</td>
                             {DAGAR.map(dag => {
                               const val = sched[dag]?.[pass] || [];
                               const highlight = isThisWeek && dag === TODAY;
