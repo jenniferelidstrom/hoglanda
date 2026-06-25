@@ -10,6 +10,21 @@ const C = {
 }
 
 const r2 = (n) => Math.round((Number(n)||0) * 100) / 100
+// Hämtar ALLA rader i omgångar. Supabase/PostgREST returnerar som standard max
+// 1000 rader per anrop, så utan paginering tappas äldre rader tyst när en tabell
+// växer förbi 1000 rader. buildQuery(from, to) ska returnera en query med .range(from, to).
+async function fetchAllRows(buildQuery, pageSize = 1000) {
+  let all = []
+  let from = 0
+  for (let guard = 0; guard < 1000; guard++) {
+    const { data, error } = await buildQuery(from, from + pageSize - 1)
+    if (error || !data || data.length === 0) break
+    all = all.concat(data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return all
+}
 const PASS = ['Utsläpp','Lunchfodring','Gå med Stella','Lägga in middag','Göra ny middag','Insläpp','Kvällsfodring']
 const PASS_ICONS = ['🌅','🥕','🚶','🍽️','🔄','🏠','🌙']
 const ADMIN_ONLY_PASS = ['Gå med Stella','Lägga in middag','Göra ny middag']
@@ -470,17 +485,17 @@ export default function StableApp({ session, role, onSignOut }) {
       if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
       else setUserHorses(null)
     }
-    const stroQuery = isAdmin
+    const s = await fetchAllRows((from, to) => (isAdmin
       ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
       : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
-    const { data: s } = await stroQuery
+    ).range(from, to))
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    const hoQuery = isAdmin
+    const h = await fetchAllRows((from, to) => (isAdmin
       ? supabase.from('ho_log').select('*').order('date', { ascending: false })
       : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
-    const { data: h } = await hoQuery
+    ).range(from, to))
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    const { data: db } = await supabase.from('dagbok').select('*').order('date', { ascending: false })
+    const db = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to))
     if (db) setDagbokEntries(db)
     setLoadingData(false)
   }
@@ -737,12 +752,14 @@ export default function StableApp({ session, role, onSignOut }) {
   async function submitHo() {
     if (!hoForm.amount || !hoForm.horse) return
     const name = userEmail.split('@')[0]
-    const { data } = await supabase.from('ho_log').insert({ name, item:hoForm.item, amount:hoForm.amount, date:hoForm.date, user_id:userId, horse:hoForm.horse }).select().single()
+    const { data, error } = await supabase.from('ho_log').insert({ name, item:hoForm.item, amount:hoForm.amount, date:hoForm.date, user_id:userId, horse:hoForm.horse }).select().single()
+    if (error) { alert('Kunde inte spara hö-loggen för ' + hoForm.date + ': ' + error.message); return }
     if (data) setHoLog(p => [{ id:data.id, name:data.name, item:data.item, amount:data.amount, date:data.date, user_id:data.user_id, horse:data.horse||'' }, ...p].sort((a,b) => b.date.localeCompare(a.date)))
     setHoOk(true); setHoForm(f => ({ ...f, amount:1.0, date:TODAY_DATE, horse:'' })); setTimeout(() => setHoOk(false), 3000)
   }
   async function saveHoEdit() {
-    await supabase.from('ho_log').update({ item:hoEditData.item, amount:hoEditData.amount, date:hoEditData.date, horse:hoEditData.horse||'' }).eq('id', hoEditId)
+    const { error } = await supabase.from('ho_log').update({ item:hoEditData.item, amount:hoEditData.amount, date:hoEditData.date, horse:hoEditData.horse||'' }).eq('id', hoEditId)
+    if (error) { alert('Kunde inte spara ändringen: ' + error.message); return }
     setHoLog(p => p.map(l => l.id === hoEditId ? { ...l, ...hoEditData } : l)); setHoEditId(null); setHoEditData(null)
   }
   async function deleteHo(id) {
@@ -767,7 +784,14 @@ export default function StableApp({ session, role, onSignOut }) {
     const { data, error } = await supabase.from('ho_log').insert(rows).select()
     if (error) { setBulkHoMsg('Fel: ' + error.message); setTimeout(() => setBulkHoMsg(''), 5000); return }
     if (data) setHoLog(p => [...data.map(d => ({ id:d.id, name:d.name, item:d.item, amount:d.amount, date:d.date, user_id:d.user_id, horse:d.horse||'' })), ...p].sort((a,b) => b.date.localeCompare(a.date)))
-    setBulkHoMsg('✓ ' + rows.length + ' loggar tillagda för ' + hoForm.horse + ' (' + hoForm.amount + ' kg ' + hoForm.item + '). De kan ändras eller tas bort i historiken nedan.')
+    const savedCount = data ? data.length : 0
+    if (savedCount < rows.length) {
+      setBulkHoMsg('⚠ Endast ' + savedCount + ' av ' + rows.length + ' loggar kunde läsas tillbaka från databasen. Övriga (' + (rows.length - savedCount) + ') sparades inte – det tyder på en behörighets- eller datumregel i databasen (t.ex. för datum före ett visst datum). Kontakta den som hanterar Supabase.')
+      setBulkHoDates([])
+      setTimeout(() => setBulkHoMsg(''), 10000)
+      return
+    }
+    setBulkHoMsg('✓ ' + savedCount + ' loggar tillagda för ' + hoForm.horse + ' (' + hoForm.amount + ' kg ' + hoForm.item + '). De kan ändras eller tas bort i historiken nedan.')
     setBulkHoDates([])
     setTimeout(() => setBulkHoMsg(''), 6000)
   }
