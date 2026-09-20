@@ -283,9 +283,11 @@ function Field({ label, children }) {
     </div>
   )
 }
-function SaveBadge({ saving }) {
-  if (!saving) return null
-  return <span style={{ fontSize:'0.65rem', color:'rgba(200,169,110,0.6)', marginLeft:8 }}>💾 Sparar...</span>
+function SaveBadge({ status }) {
+  if (status === 'saving') return <span style={{ fontSize:'0.65rem', color:'rgba(200,169,110,0.6)', marginLeft:8 }}>💾 Sparar...</span>
+  if (status === 'saved') return <span style={{ fontSize:'0.65rem', color:'#a7d1a0', marginLeft:8, fontWeight:'bold' }}>✓ Sparat</span>
+  if (status === 'error') return <span style={{ fontSize:'0.65rem', color:'#ffb3ab', marginLeft:8, fontWeight:'bold' }}>⚠ Kunde inte spara</span>
+  return null
 }
 function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   const [open, setOpen] = useState(false)
@@ -363,7 +365,9 @@ export default function StableApp({ session, role, onSignOut }) {
   const userEmail = session.user.email
   const [tab, setTab] = useState('schema')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('idle') // 'idle' | 'saving' | 'saved' | 'error'
+  const savedTimerRef = useRef(null)
+  const [loadError, setLoadError] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
   const [horseNames, setHorseNames] = useState(INITIAL_HORSES.map(h => h.name))
@@ -464,6 +468,8 @@ export default function StableApp({ session, role, onSignOut }) {
 
   async function loadAllData() {
     setLoadingData(true)
+    setLoadError(false)
+    try {
     const { data } = await supabase.from('app_data').select('key, value')
     if (data) data.forEach(row => {
       if (row.key === 'horseNames') setHorseNames(row.value)
@@ -497,13 +503,25 @@ export default function StableApp({ session, role, onSignOut }) {
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
     const db = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to))
     if (db) setDagbokEntries(db)
-    setLoadingData(false)
+    } catch (e) {
+      setLoadError(true)
+    } finally {
+      setLoadingData(false)
+    }
   }
 
   async function saveKey(key, value) {
-    setSaving(true)
-    await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
-    setSaving(false)
+    if (savedTimerRef.current) { clearTimeout(savedTimerRef.current); savedTimerRef.current = null }
+    setSaveStatus('saving')
+    try {
+      const { error } = await supabase.from('app_data').upsert({ key, value }, { onConflict: 'key' })
+      if (error) throw error
+      setSaveStatus('saved')
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch (e) {
+      setSaveStatus('error')
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 6000)
+    }
   }
 
   function goSchedWeek(d) {
@@ -858,6 +876,17 @@ export default function StableApp({ session, role, onSignOut }) {
     </div>
   )
 
+  if (loadError) return (
+    <div style={{ minHeight:'100vh', background:C.cream, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <div style={{ textAlign:'center', maxWidth:340 }}>
+        <div style={{ fontSize:'2.5rem', marginBottom:12 }}>📡</div>
+        <div style={{ color:C.bark, fontFamily:'Georgia,serif', fontSize:'1.05rem', fontWeight:'bold', marginBottom:6 }}>Kunde inte ladda</div>
+        <div style={{ color:C.muted, fontFamily:'Georgia,serif', fontSize:'0.9rem', marginBottom:18, lineHeight:1.5 }}>Kontrollera din internetanslutning och försök igen.</div>
+        <button onClick={() => loadAllData()} style={{ padding:'11px 22px', borderRadius:10, border:'none', background:`linear-gradient(135deg, ${C.forest}, ${C.moss})`, color:C.straw, fontFamily:'Georgia,serif', fontSize:'0.95rem', fontWeight:'bold', cursor:'pointer' }}>Försök igen</button>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ minHeight:'100vh', background:C.cream, fontFamily:'Georgia,serif', paddingBottom: isMobile ? 72 : 0 }}>
 
@@ -871,7 +900,7 @@ export default function StableApp({ session, role, onSignOut }) {
             <div>
               <h1 style={{ color:C.straw, fontSize: isMobile ? '1rem' : '1.3rem', fontWeight:'bold', margin:0 }}>Höglanda Hästgård</h1>
               <p style={{ color:'rgba(200,169,110,0.65)', fontSize:'0.6rem', margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>
-                {isAdmin ? '👑 Admin' : isRyttare ? '🏇 Medryttare' : '🐴 Inackordering'}{!isMobile && ' · ' + userEmail}<SaveBadge saving={saving} />
+                {isAdmin ? '👑 Admin' : isRyttare ? '🏇 Medryttare' : '🐴 Inackordering'}{!isMobile && ' · ' + userEmail}<SaveBadge status={saveStatus} />
               </p>
             </div>
           </div>
