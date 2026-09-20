@@ -890,7 +890,7 @@ export default function StableApp({ session, role, onSignOut }) {
   return (
     <div style={{ minHeight:'100vh', background:C.cream, fontFamily:'Georgia,serif', paddingBottom: isMobile ? 72 : 0 }}>
 
-      <header style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', boxShadow:'0 4px 20px rgba(0,0,0,0.2)', position:'sticky', top:0, zIndex:20 }}>
+      <header style={{ background:'linear-gradient(135deg,'+C.forest+','+C.moss+')', boxShadow:'0 4px 20px rgba(0,0,0,0.2)', position:'sticky', top:0, zIndex:20, paddingTop:'env(safe-area-inset-top)', paddingLeft:'env(safe-area-inset-left)', paddingRight:'env(safe-area-inset-right)' }}>
         <div style={{ padding: isMobile ? '10px 14px 8px' : '14px 20px 10px', borderBottom:'2px solid rgba(200,169,110,0.4)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             {isMobile && (
