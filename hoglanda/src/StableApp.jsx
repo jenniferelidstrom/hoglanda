@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import inbetningshagarSkiss from '@/assets/inbetningshagar-skiss.png'
 import hagarSkiss from '@/assets/hagar-skiss.png'
+import { isIOS, isStandalone, getPushState, enablePush, disablePush } from './push.js'
 
 const C = {
   forest:'#2d4a2d', moss:'#4a6741', sage:'#7a9970',
@@ -288,6 +289,55 @@ function SaveBadge({ status }) {
   if (status === 'saved') return <span style={{ fontSize:'0.65rem', color:'#a7d1a0', marginLeft:8, fontWeight:'bold' }}>✓ Sparat</span>
   if (status === 'error') return <span style={{ fontSize:'0.65rem', color:'#ffb3ab', marginLeft:8, fontWeight:'bold' }}>⚠ Kunde inte spara</span>
   return null
+}
+function NotisCard({ userId }) {
+  const [state, setState] = useState('loading') // loading|unsupported|denied|off|on
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { getPushState().then(setState).catch(() => setState('off')) }, [])
+  async function toggle() {
+    setBusy(true)
+    try {
+      if (state === 'on') { await disablePush(); setState('off') }
+      else { await enablePush(userId); setState('on') }
+    } catch (e) {
+      const s = await getPushState().catch(() => 'off')
+      if (s === 'on') setState('on')
+      else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') setState('denied')
+      else setState('off')
+    }
+    setBusy(false)
+  }
+  const iosNeedsInstall = state === 'unsupported' && isIOS() && !isStandalone()
+  return (
+    <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:'16px 20px', marginBottom:16 }}>
+      <h4 style={{ color:C.forest, fontSize:'0.95rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>🔔 Notiser</h4>
+      {state === 'loading' && <p style={{ color:C.muted, fontSize:'0.82rem', margin:0 }}>Laddar…</p>}
+      {state === 'unsupported' && (
+        <p style={{ color:C.muted, fontSize:'0.82rem', margin:0, lineHeight:1.5 }}>
+          {iosNeedsInstall
+            ? 'För att få notiser på iPhone: lägg först till appen på hemskärmen (dela-knappen → "Lägg till på hemskärmen") och öppna den därifrån.'
+            : 'Din webbläsare stöder tyvärr inte notiser.'}
+        </p>
+      )}
+      {state === 'denied' && (
+        <p style={{ color:C.muted, fontSize:'0.82rem', margin:0, lineHeight:1.5 }}>
+          Notiser är blockerade. Tillåt notiser för appen i telefonens/webbläsarens inställningar och försök igen.
+        </p>
+      )}
+      {(state === 'off' || state === 'on') && (
+        <>
+          <p style={{ color:C.muted, fontSize:'0.82rem', margin:'0 0 12px', lineHeight:1.5 }}>
+            {state === 'on' ? 'Notiser är på för den här enheten. ✓' : 'Få ett pling på den här enheten när något händer i appen.'}
+          </p>
+          <button onClick={toggle} disabled={busy} style={{ padding:'10px 18px', borderRadius:9, border:'none', cursor: busy ? 'default' : 'pointer', fontFamily:'Georgia,serif', fontSize:'0.88rem', fontWeight:'bold',
+            background: state === 'on' ? C.parchment : `linear-gradient(135deg, ${C.forest}, ${C.moss})`,
+            color: state === 'on' ? C.bark : C.straw, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Ett ögonblick…' : state === 'on' ? 'Stäng av notiser' : '🔔 Aktivera notiser'}
+          </button>
+        </>
+      )}
+    </div>
+  )
 }
 function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   const [open, setOpen] = useState(false)
@@ -1484,7 +1534,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
+          <SettingsTab userId={userId} riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1494,6 +1544,7 @@ export default function StableApp({ session, role, onSignOut }) {
         {tab === 'info' && (
           <div>
             <SectionTitle icon="ℹ️" title="Välkommen till Höglanda-appen!" sub="Här hittar du information om hur du använder appen" />
+            <NotisCard userId={userId} />
             <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:20, marginBottom:16 }}>
               <h3 style={{ color:C.bark, fontSize:'1rem', margin:'0 0 8px', display:'flex', alignItems:'center', gap:8 }}>
                 {isRyttare ? '🏇 Du är inloggad som Medryttare' : '🐴 Du är inloggad som Inackordering'}
@@ -2410,7 +2461,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
   )
 }
 
-function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
+function SettingsTab({ userId, riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
@@ -2464,6 +2515,7 @@ function SettingsTab({ riderConfig, setRiderConfig, horseNames, horseConfig, set
   return (
     <div>
       <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera hästar och ryttare med start- och slutdatum" />
+      <NotisCard userId={userId} />
 
       {/* ── FUNKTIONS-FLAGGOR ── */}
       <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
