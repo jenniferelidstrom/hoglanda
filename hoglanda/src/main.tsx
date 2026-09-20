@@ -50,3 +50,10 @@ function App() {
 }
 
 createRoot(document.getElementById('root')).render(<App />)
+
+// Registrera service worker (gör appen installerbar + snabb offline-start)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
