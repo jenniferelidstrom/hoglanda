@@ -86,6 +86,17 @@
   .feature p{color:rgba(247,242,232,.82); font-size:.98rem; margin:0}
   @media(max-width:760px){ .features{grid-template-columns:1fr} }
 
+  .gallery{background:var(--cream)}
+  .gallery .sec-head h2{color:var(--forest)}
+  .ggrid{display:grid; grid-template-columns:repeat(2,1fr); gap:16px}
+  .gitem{position:relative; margin:0; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(45,74,45,.14); border:4px solid #fff}
+  .gitem img{width:100%; height:100%; object-fit:cover; aspect-ratio:4/3; display:block; transition:transform .6s ease}
+  .gitem:hover img{transform:scale(1.06)}
+  .gitem .cap{position:absolute; left:0; right:0; bottom:0; margin:0; padding:30px 16px 13px; color:#fff; font-size:.92rem; font-weight:600; background:linear-gradient(transparent, rgba(28,44,28,.82))}
+  .gitem.wide{grid-column:1 / -1}
+  .gitem.wide img{aspect-ratio:16/7}
+  @media(max-width:640px){ .ggrid{grid-template-columns:1fr} .gitem.wide img{aspect-ratio:4/3} }
+
   .hyra{background:var(--parchment)}
   .hyra .sec-head h2{color:var(--forest)}
   .hcards{display:grid; grid-template-columns:1fr 1fr; gap:24px}
@@ -129,6 +140,7 @@
     <nav class="navlinks">
       <a href="#om">Om oss</a>
       <a href="#anlaggning">Anläggning</a>
+      <a href="#galleri">Galleri</a>
       <a href="#hyra">Inackordering</a>
       <a href="#hastarna">Hästarna</a>
       <a href="#kontakt">Kontakt</a>
@@ -203,6 +215,23 @@
         <h3>Hagar året runt</h3>
         <p>Stora gräshagar på sommaren och egen grushage vintertid. Lång utevistelse och grupper som sätts efter vad som passar hästarna bäst.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="gallery" id="galleri">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Galleri</span>
+      <h2>Bilder från gården</h2>
+      <p>En titt på anläggningen, hagarna och stallet – i både kvällssol och vardag.</p>
+    </div>
+    <div class="ggrid">
+      <figure class="gitem wide"><img src="paddock2.jpg" alt="Paddock med hinder märkt Höglanda Hästgård i solnedgång"><figcaption class="cap">Hoppning på hemmaplan i kvällssol</figcaption></figure>
+      <figure class="gitem"><img src="paddock1.jpg" alt="Belyst paddock med hinder i kvällsljus"><figcaption class="cap">Belyst paddock 30×50 m</figcaption></figure>
+      <figure class="gitem"><img src="stallet.jpg" alt="Stallbyggnaden i rött med vita bågfönster"><figcaption class="cap">Vårt stall</figcaption></figure>
+      <figure class="gitem"><img src="sommarhage.jpg" alt="Hästar som betar på grön sommarhage"><figcaption class="cap">Stora sommarhagar med bete</figcaption></figure>
+      <figure class="gitem"><img src="grushage.jpg" alt="Grushage med stängsel för vinterbruk"><figcaption class="cap">Grushagar för vinterbruk</figcaption></figure>
     </div>
   </div>
 </section>
