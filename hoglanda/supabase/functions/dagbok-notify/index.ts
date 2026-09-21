@@ -28,7 +28,8 @@ Deno.serve(async (req) => {
     const row = payload.record ?? payload
     const horse: string | undefined = row?.horse
     const authorId: string | undefined = row?.user_id
-    const authorName: string = row?.name || 'Någon'
+    // Namnet i notisen = ryttaren ("Vem red?") från anteckningen; annars den som skrev.
+    const authorName: string = row?.ryttare || row?.name || 'Någon'
     if (!horse) return json({ skipped: 'ingen häst' })
 
     // Vilka bevakar den här hästen?

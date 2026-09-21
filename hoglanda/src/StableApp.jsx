@@ -340,27 +340,6 @@ function NotisCard({ userId }) {
     </div>
   )
 }
-function NameCard({ userId, displayName, setDisplayName }) {
-  const [val, setVal] = useState(displayName || '')
-  const [saved, setSaved] = useState(false)
-  useEffect(() => { setVal(displayName || '') }, [displayName])
-  async function save() {
-    const name = val.trim()
-    const { error } = await supabase.from('user_names').upsert({ user_id: userId, name }, { onConflict: 'user_id' })
-    if (!error) { setDisplayName(name); setSaved(true); setTimeout(() => setSaved(false), 2500) }
-  }
-  return (
-    <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:'16px 20px', marginBottom:16 }}>
-      <h4 style={{ color:C.forest, fontSize:'0.95rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>👤 Ditt namn</h4>
-      <p style={{ color:C.muted, fontSize:'0.82rem', margin:'0 0 12px', lineHeight:1.5 }}>Visas i dagboken och i notiser (t.ex. "Anna skrev om Skye"). Annars visas början på din e-postadress.</p>
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        <input value={val} onChange={e => setVal(e.target.value)} placeholder="T.ex. Anna" style={{ ...inp, flex:1, minWidth:150 }} />
-        <button onClick={save} disabled={!val.trim()} style={{ padding:'11px 18px', borderRadius:9, border:'none', cursor: val.trim() ? 'pointer' : 'default', fontFamily:'Georgia,serif', fontSize:'0.88rem', fontWeight:'bold', background:`linear-gradient(135deg, ${C.forest}, ${C.moss})`, color:C.straw, opacity: val.trim() ? 1 : 0.5 }}>Spara</button>
-      </div>
-      {saved && <p style={{ color:C.moss, fontSize:'0.8rem', margin:'8px 0 0', fontWeight:'bold' }}>✓ Sparat</p>}
-    </div>
-  )
-}
 function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -441,8 +420,7 @@ export default function StableApp({ session, role, onSignOut }) {
   const savedTimerRef = useRef(null)
   const [loadError, setLoadError] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
-  const [displayName, setDisplayName] = useState('')
-  const myName = displayName || (userEmail ? userEmail.split('@')[0] : '')
+  const myName = userEmail ? userEmail.split('@')[0] : ''
 
   const [horseNames, setHorseNames] = useState(INITIAL_HORSES.map(h => h.name))
   const [horseConfig, setHorseConfig] = useState(buildInitialHorseConfig())
@@ -539,10 +517,6 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookType, setBookType] = useState('grön')
 
   useEffect(() => { loadAllData() }, [])
-  useEffect(() => {
-    supabase.from('user_names').select('name').eq('user_id', userId).maybeSingle()
-      .then(({ data }) => { if (data && data.name) setDisplayName(data.name) })
-  }, [])
 
   async function loadAllData() {
     setLoadingData(true)
@@ -926,8 +900,10 @@ export default function StableApp({ session, role, onSignOut }) {
     }
   }
   async function deleteDagbokEntry(id) {
-    await supabase.from('dagbok').delete().eq('id', id)
+    const { error } = await supabase.from('dagbok').delete().eq('id', id)
+    if (error) { alert('Kunde inte ta bort: ' + error.message); return }
     setDagbokEntries(p => p.filter(e => e.id !== id))
+    setDagbokEditDay(null)
   }
 
   const foderHorses = (userHorses ? visibleHorseNames.filter(n => userHorses.includes(n)) : visibleHorseNames).slice().sort((a,b) => a.localeCompare(b, 'sv'))
@@ -1502,7 +1478,10 @@ export default function StableApp({ session, role, onSignOut }) {
                                 {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
                                 <div style={{ fontSize:'0.68rem', color:C.muted, marginTop:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                                   <span>— {entry.name}</span>
-                                  <button onClick={() => setDagbokEditDay(i)} style={{ background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.72rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
+                                  <div style={{ display:'flex', gap:6 }}>
+                                    <button onClick={() => setDagbokEditDay(i)} style={{ background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.72rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
+                                    <button onClick={() => { if (window.confirm('Ta bort dagboksanteckningen?')) deleteDagbokEntry(entry.id) }} style={{ background:'#f7e0dd', border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.72rem', cursor:'pointer', fontFamily:'Georgia,serif', color:'#a1443b' }}>🗑️ Ta bort</button>
+                                  </div>
                                 </div>
                               </div>
                             ) : (
@@ -1542,7 +1521,10 @@ export default function StableApp({ session, role, onSignOut }) {
                                 {entry.kandes && <div style={{ marginBottom:4 }}><strong>Kändes:</strong> {entry.kandes}</div>}
                                 {entry.ovrigt && <div style={{ marginBottom:4 }}><strong>Övrigt:</strong> {entry.ovrigt}</div>}
                                 <div style={{ fontSize:'0.65rem', color:C.muted, marginTop:6 }}>— {entry.name}</div>
-                                <button onClick={() => setDagbokEditDay(i)} style={{ marginTop:6, background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
+                                <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                                  <button onClick={() => setDagbokEditDay(i)} style={{ background:C.parchment, border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:C.bark }}>✏️ Redigera</button>
+                                  <button onClick={() => { if (window.confirm('Ta bort dagboksanteckningen?')) deleteDagbokEntry(entry.id) }} style={{ background:'#f7e0dd', border:'none', borderRadius:6, padding:'4px 10px', fontSize:'0.7rem', cursor:'pointer', fontFamily:'Georgia,serif', color:'#a1443b' }}>🗑️ Ta bort</button>
+                                </div>
                               </div>
                             ) : (
                               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
@@ -1563,7 +1545,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab userId={userId} displayName={displayName} setDisplayName={setDisplayName} riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
+          <SettingsTab userId={userId} riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1574,7 +1556,6 @@ export default function StableApp({ session, role, onSignOut }) {
           <div>
             <SectionTitle icon="ℹ️" title="Välkommen till Höglanda-appen!" sub="Här hittar du information om hur du använder appen" />
             <NotisCard userId={userId} />
-            <NameCard userId={userId} displayName={displayName} setDisplayName={setDisplayName} />
             <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:20, marginBottom:16 }}>
               <h3 style={{ color:C.bark, fontSize:'1rem', margin:'0 0 8px', display:'flex', alignItems:'center', gap:8 }}>
                 {isRyttare ? '🏇 Du är inloggad som Medryttare' : '🐴 Du är inloggad som Inackordering'}
@@ -2491,7 +2472,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
   )
 }
 
-function SettingsTab({ userId, displayName, setDisplayName, riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
+function SettingsTab({ userId, riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
@@ -2546,7 +2527,6 @@ function SettingsTab({ userId, displayName, setDisplayName, riderConfig, setRide
     <div>
       <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera hästar och ryttare med start- och slutdatum" />
       <NotisCard userId={userId} />
-      <NameCard userId={userId} displayName={displayName} setDisplayName={setDisplayName} />
 
       {/* ── FUNKTIONS-FLAGGOR ── */}
       <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
