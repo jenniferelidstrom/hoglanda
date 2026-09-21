@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { supabase } from './supabase.js'
-import horseMark from './assets/horse-light.svg'
+import hoglandaLogo from './assets/logo-light.svg'
 
 const C = {
   forest: '#2d4a2d', moss: '#4a6741', straw: '#c8a96e',
@@ -48,9 +48,8 @@ export default function Login() {
 
         {/* Image + title */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <img src={horseMark} alt="Höglanda Hästgård" style={{ width: 210, maxWidth: '70%', height: 'auto', display: 'block', margin: '0 auto 8px' }} />
-          <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '1.5rem', color: C.straw, margin: 0 }}>Höglanda Hästgård</h1>
-          <p style={{ color: 'rgba(200,169,110,0.7)', fontSize: '0.85rem', marginTop: 4, fontFamily: 'Georgia,serif' }}>Stallapp</p>
+          <img src={hoglandaLogo} alt="Höglanda Hästgård" style={{ width: 320, maxWidth: '90%', height: 'auto', display: 'block', margin: '0 auto 2px' }} />
+          <p style={{ color: 'rgba(200,169,110,0.7)', fontSize: '0.85rem', marginTop: 0, fontFamily: 'Georgia,serif' }}>Stallapp</p>
         </div>
 
         <div style={{ background: '#fff', borderRadius: 16, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
