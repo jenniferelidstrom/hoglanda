@@ -48,7 +48,7 @@ export default function Login() {
 
         {/* Image + title */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <img src={hoglandaLogo} alt="Höglanda Hästgård" style={{ width: 320, maxWidth: '90%', height: 'auto', display: 'block', margin: '0 auto 2px' }} />
+          <img src={hoglandaLogo} alt="Höglanda Hästgård" style={{ width: 200, maxWidth: '58%', height: 'auto', display: 'block', margin: '0 auto 2px' }} />
           <p style={{ color: 'rgba(200,169,110,0.7)', fontSize: '0.85rem', marginTop: 0, fontFamily: 'Georgia,serif' }}>Stallapp</p>
         </div>
 
