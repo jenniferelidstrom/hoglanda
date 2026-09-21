@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client'
 import inbetningshagarSkiss from '@/assets/inbetningshagar-skiss.png'
 import hagarSkiss from '@/assets/hagar-skiss.png'
 import { isIOS, isStandalone, getPushState, enablePush, disablePush } from './push.js'
+import hoglandaLogo from '@/assets/logo-light.svg'
 
 const C = {
   forest:'#2d4a2d', moss:'#4a6741', sage:'#7a9970',
@@ -921,8 +922,10 @@ export default function StableApp({ session, role, onSignOut }) {
 
 
   if (loadingData) return (
-    <div style={{ minHeight:'100vh', background:C.cream, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center' }}><div style={{ fontSize:'2.5rem', marginBottom:12 }}>🌿</div><div style={{ color:C.moss, fontFamily:'Georgia,serif' }}>Laddar...</div></div>
+    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg, #2d4a2d, #4a6741)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <img src={hoglandaLogo} alt="Höglanda Hästgård" style={{ width:300, maxWidth:'80%', height:'auto' }} />
+      <p style={{ color:'rgba(200,169,110,0.72)', fontFamily:'Georgia,serif', fontSize:'1rem', margin:'2px 0 0' }}>Stallapp</p>
+      <p style={{ color:'rgba(200,169,110,0.5)', fontFamily:'Georgia,serif', fontSize:'0.8rem', margin:'26px 0 0' }}>Laddar…</p>
     </div>
   )
 

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { supabase } from './supabase.js'
 import Login from './Login.jsx'
 import StableApp from './StableApp.jsx'
+import hoglandaLogo from './assets/logo-light.svg'
 
 function App() {
   const [session, setSession] = useState(null)
@@ -36,11 +37,10 @@ function App() {
   }
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#f7f2e8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🌿</div>
-        <div style={{ color: '#4a6741', fontFamily: 'Georgia,serif' }}>Laddar...</div>
-      </div>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #2d4a2d, #4a6741)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <img src={hoglandaLogo} alt="Höglanda Hästgård" style={{ width: 300, maxWidth: '80%', height: 'auto' }} />
+      <p style={{ color: 'rgba(200,169,110,0.72)', fontFamily: 'Georgia,serif', fontSize: '1rem', margin: '2px 0 0' }}>Stallapp</p>
+      <p style={{ color: 'rgba(200,169,110,0.5)', fontFamily: 'Georgia,serif', fontSize: '0.8rem', margin: '26px 0 0' }}>Laddar…</p>
     </div>
   )
 
