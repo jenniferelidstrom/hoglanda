@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     if (!subs || subs.length === 0) return json({ skipped: 'inga prenumerationer' })
 
     const notif = JSON.stringify({
-      title: 'Ny dagboksanteckning 🐴',
+      title: 'Ny dagboksanteckning från Höglanda Hästgård',
       body: `${authorName} skrev om ${horse}`,
       url: '/',
       tag: 'dagbok-' + horse,

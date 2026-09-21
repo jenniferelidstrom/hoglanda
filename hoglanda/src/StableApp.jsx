@@ -340,6 +340,27 @@ function NotisCard({ userId }) {
     </div>
   )
 }
+function NameCard({ userId, displayName, setDisplayName }) {
+  const [val, setVal] = useState(displayName || '')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => { setVal(displayName || '') }, [displayName])
+  async function save() {
+    const name = val.trim()
+    const { error } = await supabase.from('user_names').upsert({ user_id: userId, name }, { onConflict: 'user_id' })
+    if (!error) { setDisplayName(name); setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
+  return (
+    <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:'16px 20px', marginBottom:16 }}>
+      <h4 style={{ color:C.forest, fontSize:'0.95rem', margin:'0 0 6px', display:'flex', alignItems:'center', gap:8 }}>👤 Ditt namn</h4>
+      <p style={{ color:C.muted, fontSize:'0.82rem', margin:'0 0 12px', lineHeight:1.5 }}>Visas i dagboken och i notiser (t.ex. "Anna skrev om Skye"). Annars visas början på din e-postadress.</p>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <input value={val} onChange={e => setVal(e.target.value)} placeholder="T.ex. Anna" style={{ ...inp, flex:1, minWidth:150 }} />
+        <button onClick={save} disabled={!val.trim()} style={{ padding:'11px 18px', borderRadius:9, border:'none', cursor: val.trim() ? 'pointer' : 'default', fontFamily:'Georgia,serif', fontSize:'0.88rem', fontWeight:'bold', background:`linear-gradient(135deg, ${C.forest}, ${C.moss})`, color:C.straw, opacity: val.trim() ? 1 : 0.5 }}>Spara</button>
+      </div>
+      {saved && <p style={{ color:C.moss, fontSize:'0.8rem', margin:'8px 0 0', fontWeight:'bold' }}>✓ Sparat</p>}
+    </div>
+  )
+}
 function RiderPicker({ horseName, selected, onChange, riderConfig, readOnly }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -420,6 +441,8 @@ export default function StableApp({ session, role, onSignOut }) {
   const savedTimerRef = useRef(null)
   const [loadError, setLoadError] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
+  const [displayName, setDisplayName] = useState('')
+  const myName = displayName || (userEmail ? userEmail.split('@')[0] : '')
 
   const [horseNames, setHorseNames] = useState(INITIAL_HORSES.map(h => h.name))
   const [horseConfig, setHorseConfig] = useState(buildInitialHorseConfig())
@@ -516,6 +539,10 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookType, setBookType] = useState('grön')
 
   useEffect(() => { loadAllData() }, [])
+  useEffect(() => {
+    supabase.from('user_names').select('name').eq('user_id', userId).maybeSingle()
+      .then(({ data }) => { if (data && data.name) setDisplayName(data.name) })
+  }, [])
 
   async function loadAllData() {
     setLoadingData(true)
@@ -799,7 +826,7 @@ export default function StableApp({ session, role, onSignOut }) {
   async function submitStro() {
     if (!sForm.horse) return
     if (sForm.stroAmount === 0 && sForm.pelletsAmount === 0) return
-    const name = userEmail.split('@')[0]
+    const name = myName
     const date = sForm.date || TODAY_DATE
     const inserts = []
     if (sForm.stroAmount > 0) inserts.push({ name, item:'Stallströ', amount:sForm.stroAmount, date, user_id:userId, horse:sForm.horse })
@@ -820,7 +847,7 @@ export default function StableApp({ session, role, onSignOut }) {
 
   async function submitHo() {
     if (!hoForm.amount || !hoForm.horse) return
-    const name = userEmail.split('@')[0]
+    const name = myName
     const { data, error } = await supabase.from('ho_log').insert({ name, item:hoForm.item, amount:hoForm.amount, date:hoForm.date, user_id:userId, horse:hoForm.horse }).select().single()
     if (error) { alert('Kunde inte spara hö-loggen för ' + hoForm.date + ': ' + error.message); return }
     if (data) setHoLog(p => [{ id:data.id, name:data.name, item:data.item, amount:data.amount, date:data.date, user_id:data.user_id, horse:data.horse||'' }, ...p].sort((a,b) => b.date.localeCompare(a.date)))
@@ -848,7 +875,7 @@ export default function StableApp({ session, role, onSignOut }) {
     if (!hoForm.horse) { setBulkHoMsg('Välj en häst först.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
     if (!hoForm.amount || hoForm.amount <= 0) { setBulkHoMsg('Ange en mängd större än 0.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
     if (bulkHoDates.length === 0) { setBulkHoMsg('Välj minst ett datum.'); setTimeout(() => setBulkHoMsg(''), 4000); return }
-    const name = userEmail.split('@')[0]
+    const name = myName
     const rows = bulkHoDates.map(date => ({ name, item: hoForm.item, amount: hoForm.amount, date, user_id: userId, horse: hoForm.horse }))
     const { data, error } = await supabase.from('ho_log').insert(rows).select()
     if (error) { setBulkHoMsg('Fel: ' + error.message); setTimeout(() => setBulkHoMsg(''), 5000); return }
@@ -890,10 +917,10 @@ export default function StableApp({ session, role, onSignOut }) {
   async function saveDagbokEntry(horse, date, ryttare, vad, kandes, ovrigt) {
     const existing = dagbokEntries.find(e => e.horse === horse && e.date === date)
     if (existing) {
-      await supabase.from('dagbok').update({ ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] }).eq('id', existing.id)
-      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, ryttare, vad, kandes, ovrigt, user_id: userId, name: userEmail.split('@')[0] } : e))
+      await supabase.from('dagbok').update({ ryttare, vad, kandes, ovrigt, user_id: userId, name: myName }).eq('id', existing.id)
+      setDagbokEntries(p => p.map(e => e.id === existing.id ? { ...e, ryttare, vad, kandes, ovrigt, user_id: userId, name: myName } : e))
     } else {
-      const name = userEmail.split('@')[0]
+      const name = myName
       const { data } = await supabase.from('dagbok').insert({ horse, date, ryttare, vad, kandes, ovrigt, user_id: userId, name }).select().single()
       if (data) setDagbokEntries(p => [data, ...p].sort((a,b) => b.date.localeCompare(a.date)))
     }
@@ -949,7 +976,6 @@ export default function StableApp({ session, role, onSignOut }) {
             {isMobile && (
               <button onClick={() => setMenuOpen(!menuOpen)} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(200,169,110,0.3)', borderRadius:7, padding:'7px 10px', color:C.straw, cursor:'pointer', fontSize:'1.2rem', lineHeight:1 }}>☰</button>
             )}
-            <span style={{ fontSize: isMobile ? '1.3rem' : '1.6rem' }}>🌿</span>
             <div>
               <h1 style={{ color:C.straw, fontSize: isMobile ? '1rem' : '1.3rem', fontWeight:'bold', margin:0 }}>Höglanda Hästgård</h1>
               <p style={{ color:'rgba(200,169,110,0.65)', fontSize:'0.6rem', margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>
@@ -1537,7 +1563,7 @@ export default function StableApp({ session, role, onSignOut }) {
         })()}
 
         {tab === 'settings' && isAdmin && (
-          <SettingsTab userId={userId} riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
+          <SettingsTab userId={userId} displayName={displayName} setDisplayName={setDisplayName} riderConfig={riderConfig} setRiderConfig={saveRiderConfig} horseNames={visibleHorseNames} horseConfig={horseConfig} setHorseConfig={saveHorseConfig} isMobile={isMobile} inbetningEnabled={inbetningEnabled} setInbetningEnabled={setInbetningEnabledSave} hagarEnabled={hagarEnabled} setHagarEnabled={setHagarEnabledSave} />
         )}
 
         {tab === 'export' && isAdmin && (
@@ -1548,6 +1574,7 @@ export default function StableApp({ session, role, onSignOut }) {
           <div>
             <SectionTitle icon="ℹ️" title="Välkommen till Höglanda-appen!" sub="Här hittar du information om hur du använder appen" />
             <NotisCard userId={userId} />
+            <NameCard userId={userId} displayName={displayName} setDisplayName={setDisplayName} />
             <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.parchment, padding:20, marginBottom:16 }}>
               <h3 style={{ color:C.bark, fontSize:'1rem', margin:'0 0 8px', display:'flex', alignItems:'center', gap:8 }}>
                 {isRyttare ? '🏇 Du är inloggad som Medryttare' : '🐴 Du är inloggad som Inackordering'}
@@ -2464,7 +2491,7 @@ function ExportTab({ stroLog, hoLog, isMobile, userId, horseConfig }) {
   )
 }
 
-function SettingsTab({ userId, riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
+function SettingsTab({ userId, displayName, setDisplayName, riderConfig, setRiderConfig, horseNames, horseConfig, setHorseConfig, isMobile, inbetningEnabled, setInbetningEnabled, hagarEnabled, setHagarEnabled }) {
   const [newName, setNewName] = useState({})
   const [newFrom, setNewFrom] = useState({})
   const [newTo, setNewTo] = useState({})
@@ -2519,6 +2546,7 @@ function SettingsTab({ userId, riderConfig, setRiderConfig, horseNames, horseCon
     <div>
       <SectionTitle icon="⚙️" title="Inställningar" sub="Hantera hästar och ryttare med start- och slutdatum" />
       <NotisCard userId={userId} />
+      <NameCard userId={userId} displayName={displayName} setDisplayName={setDisplayName} />
 
       {/* ── FUNKTIONS-FLAGGOR ── */}
       <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid '+C.straw, padding: isMobile ? 16 : 22, marginBottom:24 }}>
