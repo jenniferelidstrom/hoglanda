@@ -55,7 +55,6 @@ export default function Login() {
         <div style={{ background: '#fff', borderRadius: 16, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
           {mode === 'login' ? (
             <>
-              <h2 style={{ fontFamily: 'Georgia,serif', fontSize: '1.15rem', color: C.bark, textAlign: 'center', marginBottom: 20 }}>Logga in</h2>
               <form onSubmit={handleLogin}>
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 5, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-post</label>
@@ -73,9 +72,8 @@ export default function Login() {
                   <span style={{ fontSize: '0.82rem', color: C.muted, fontFamily: 'Georgia,serif' }}>Kom ihåg mig</span>
                 </div>
                 {error && <p style={{ color: '#d9534f', fontSize: '0.85rem', marginBottom: 12, textAlign: 'center' }}>{error}</p>}
-                <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${C.forest}, ${C.moss})`, color: C.straw, fontFamily: 'Georgia,serif', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', letterSpacing: '0.03em' }}>
-                  {loading ? 'Loggar in...' : 'Logga in'}
-                </button>
+                <button type="submit" aria-label="Logga in" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', border: 0 }} />
+                {loading && <p style={{ color: C.moss, fontSize: '0.9rem', textAlign: 'center', margin: 0, fontFamily: 'Georgia,serif' }}>Loggar in…</p>}
               </form>
               <button onClick={() => { setMode('forgot'); setError('') }} style={{ marginTop: 14, background: 'none', border: 'none', color: C.muted, fontSize: '0.82rem', cursor: 'pointer', width: '100%', textAlign: 'center', fontFamily: 'Georgia,serif' }}>
                 Glömt lösenordet?
