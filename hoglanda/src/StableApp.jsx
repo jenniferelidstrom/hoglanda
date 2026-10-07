@@ -34,8 +34,13 @@ const PASS_SUMMER = ['Utsläpp','Lunchfodring','Gå med Stella','Flytta hästarn
 const PASS_SUMMER_ICONS = ['🌅','🥕','🚶','🪨','🍽️','🏠']
 const ADMIN_ONLY_PASS_SUMMER = ['Gå med Stella','Flytta hästarna till grus','Lägga in och göra ny mat']
 const PASS_SUMMER_LABELS = { 'Insläpp_sommar':'Insläpp' }
+const PASS_AUTUMN = ['Utsläpp','Lunchfodring','Gå med Stella','Ge/Lägga in middag','Lägga in kväll','Insläpp','Kvällsfodring']
+const PASS_AUTUMN_ICONS = ['🌅','🥕','🚶','🍽️','🌆','🏠','🌙']
+const ADMIN_ONLY_PASS_AUTUMN = ['Gå med Stella','Ge/Lägga in middag']
+const PASS_AUTUMN_LABELS = { 'Gå med Stella':'Stella' }
 const SCHEMA_SEASONS = {
   vinter: { label:'Vinter ❄️', pass: PASS,        icons: PASS_ICONS,        adminOnly: ADMIN_ONLY_PASS,        labels: {},                 timePass:'Insläpp',        timeKey:'Insläpp_tid' },
+  höst:   { label:'Höst 🍂',   pass: PASS_AUTUMN, icons: PASS_AUTUMN_ICONS, adminOnly: ADMIN_ONLY_PASS_AUTUMN, labels: PASS_AUTUMN_LABELS, timePass:'Insläpp',        timeKey:'Insläpp_tid' },
   sommar: { label:'Sommar ☀️', pass: PASS_SUMMER, icons: PASS_SUMMER_ICONS, adminOnly: ADMIN_ONLY_PASS_SUMMER, labels: PASS_SUMMER_LABELS, timePass:'Insläpp_sommar', timeKey:'Insläpp_sommar_tid' },
 }
 const DAGAR = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag']
@@ -533,7 +538,7 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'riderConfig') setRiderConfig(row.value)
       if (row.key === 'foderState') setFoderState(row.value)
       if (row.key === 'allScheds') setAllScheds(applyDefaultsToScheds(row.value))
-      if (row.key === 'schemaSeason') setSchemaSeason(row.value === 'sommar' ? 'sommar' : 'vinter')
+      if (row.key === 'schemaSeason') setSchemaSeason(SCHEMA_SEASONS[row.value] ? row.value : 'vinter')
       if (row.key === 'allActs') setAllActs(row.value)
       if (row.key === 'allPaddock') setAllPaddock(row.value)
       if (row.key === 'allInbetning') setAllInbetning(row.value || {})
@@ -1016,6 +1021,12 @@ export default function StableApp({ session, role, onSignOut }) {
                 })}
               </div>
             </div>
+            {schemaSeason === 'höst' && (
+              <div style={{ background:C.parchment, border:`1px solid ${C.straw}`, borderRadius:9, padding:'10px 13px', marginBottom:14, fontSize:'0.8rem', color:C.bark, lineHeight:1.55 }}>
+                💡 <b>Lägga in kväll</b> tom + <b>Kvällsfodring</b> ifylld = hästarna går in <b>tidigt</b> (t.ex. regn/dåligt väder).<br />
+                <b>Kvällsfodring</b> tom + <b>Lägga in kväll</b> ifylld = hästarna går in <b>sent</b>.
+              </div>
+            )}
             <WeekNav info={weekLabel(schedMonday)} isNow={isThisWeek} onPrev={() => goSchedWeek(-1)} onNext={() => goSchedWeek(1)} />
             {isMobile ? (
               <div>
