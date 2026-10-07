@@ -522,7 +522,11 @@ export default function StableApp({ session, role, onSignOut }) {
     setLoadingData(true)
     setLoadError(false)
     try {
-    const { data } = await supabase.from('app_data').select('key, value')
+    const [appDataRes, userHorsesRes] = await Promise.all([
+      supabase.from('app_data').select('key, value'),
+      isAdmin ? Promise.resolve({ data: null }) : supabase.from('user_horses').select('horse').eq('user_id', userId),
+    ])
+    const { data } = appDataRes
     if (data) data.forEach(row => {
       if (row.key === 'horseNames') setHorseNames(row.value)
       if (row.key === 'horseConfig') setHorseConfig(row.value)
@@ -539,21 +543,23 @@ export default function StableApp({ session, role, onSignOut }) {
     })
     let myHorses = []
     if (!isAdmin) {
-      const { data: uh } = await supabase.from('user_horses').select('horse').eq('user_id', userId)
+      const uh = userHorsesRes.data
       if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
       else setUserHorses(null)
     }
-    const s = await fetchAllRows((from, to) => (isAdmin
-      ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
-      : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
-    ).range(from, to))
+    const [s, h, db] = await Promise.all([
+      fetchAllRows((from, to) => (isAdmin
+        ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
+        : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
+      ).range(from, to)),
+      fetchAllRows((from, to) => (isAdmin
+        ? supabase.from('ho_log').select('*').order('date', { ascending: false })
+        : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
+      ).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to)),
+    ])
     if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    const h = await fetchAllRows((from, to) => (isAdmin
-      ? supabase.from('ho_log').select('*').order('date', { ascending: false })
-      : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
-    ).range(from, to))
     if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    const db = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to))
     if (db) setDagbokEntries(db)
     } catch (e) {
       setLoadError(true)
