@@ -27,6 +27,11 @@ async function fetchAllRows(buildQuery, pageSize = 1000) {
   }
   return all
 }
+function mergeById(prev, incoming) {
+  const m = new Map(prev.map(x => [x.id, x]))
+  incoming.forEach(x => m.set(x.id, x))
+  return Array.from(m.values())
+}
 const PASS = ['Utsläpp','Lunchfodring','Gå med Stella','Lägga in middag','Göra ny middag','Insläpp','Kvällsfodring']
 const PASS_ICONS = ['🌅','🥕','🚶','🍽️','🔄','🏠','🌙']
 const ADMIN_ONLY_PASS = ['Gå med Stella','Lägga in middag','Göra ny middag']
@@ -521,13 +526,17 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookName, setBookName] = useState('')
   const [bookType, setBookType] = useState('grön')
 
-  const logsLoadedRef = useRef(false)
-  const dagbokLoadedRef = useRef(false)
+  const loadedStroMonths = useRef(new Set())
+  const loadedHoMonths = useRef(new Set())
+  const loadedDagbokWeeks = useRef(new Set())
+  const logsAllLoaded = useRef(false)
   useEffect(() => { loadAllData() }, [])
   useEffect(() => {
-    if (tab === 'stro' || tab === 'ho' || tab === 'export') loadLogs()
-    if (tab === 'dagbok') loadDagbok()
-  }, [tab])
+    if (tab === 'stro') loadStroMonth(stroMonth)
+    if (tab === 'ho') loadHoMonth(hoMonth)
+    if (tab === 'export') loadAllLogs()
+    if (tab === 'dagbok') loadDagbokWeek(dagbokMonday)
+  }, [tab, stroMonth.year, stroMonth.month, hoMonth.year, hoMonth.month, dagbokOffset])
 
   async function loadAllData() {
     setLoadingData(true)
@@ -569,9 +578,44 @@ export default function StableApp({ session, role, onSignOut }) {
     const mh = userHorses || []
     return mh.length > 0 ? mh : ['']
   }
-  async function loadLogs() {
-    if (logsLoadedRef.current) return
-    logsLoadedRef.current = true
+  function logRow(r) { return { id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' } }
+  async function loadStroMonth(m) {
+    if (logsAllLoaded.current) return
+    const key = m.year + '-' + String(m.month + 1).padStart(2, '0')
+    if (loadedStroMonths.current.has(key)) return
+    loadedStroMonths.current.add(key)
+    try {
+      const lo = localDateStr(new Date(m.year, m.month, 1))
+      const hi = localDateStr(new Date(m.year, m.month + 1, 1))
+      const filt = currentHorseFilter()
+      const rows = await fetchAllRows((from, to) => {
+        let q = supabase.from('stro_log').select('*').gte('date', lo).lt('date', hi)
+        if (!isAdmin) q = q.in('horse', filt)
+        return q.order('created_at', { ascending: false }).range(from, to)
+      })
+      if (rows) setStroLog(prev => mergeById(prev, rows.map(logRow)))
+    } catch (e) { loadedStroMonths.current.delete(key) }
+  }
+  async function loadHoMonth(m) {
+    if (logsAllLoaded.current) return
+    const key = m.year + '-' + String(m.month + 1).padStart(2, '0')
+    if (loadedHoMonths.current.has(key)) return
+    loadedHoMonths.current.add(key)
+    try {
+      const lo = localDateStr(new Date(m.year, m.month, 1))
+      const hi = localDateStr(new Date(m.year, m.month + 1, 1))
+      const filt = currentHorseFilter()
+      const rows = await fetchAllRows((from, to) => {
+        let q = supabase.from('ho_log').select('*').gte('date', lo).lt('date', hi)
+        if (!isAdmin) q = q.in('horse', filt)
+        return q.order('date', { ascending: false }).range(from, to)
+      })
+      if (rows) setHoLog(prev => mergeById(prev, rows.map(logRow)))
+    } catch (e) { loadedHoMonths.current.delete(key) }
+  }
+  async function loadAllLogs() {
+    if (logsAllLoaded.current) return
+    logsAllLoaded.current = true
     try {
       const filt = currentHorseFilter()
       const [s, h] = await Promise.all([
@@ -584,17 +628,21 @@ export default function StableApp({ session, role, onSignOut }) {
           : supabase.from('ho_log').select('*').in('horse', filt).order('date', { ascending: false })
         ).range(from, to)),
       ])
-      if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-      if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    } catch (e) { logsLoadedRef.current = false }
+      if (s) setStroLog(prev => mergeById(prev, s.map(logRow)))
+      if (h) setHoLog(prev => mergeById(prev, h.map(logRow)))
+    } catch (e) { logsAllLoaded.current = false }
   }
-  async function loadDagbok() {
-    if (dagbokLoadedRef.current) return
-    dagbokLoadedRef.current = true
+  async function loadDagbokWeek(monday) {
+    const wk = weekKey(monday)
+    if (loadedDagbokWeeks.current.has(wk)) return
+    loadedDagbokWeeks.current.add(wk)
     try {
-      const db = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to))
-      if (db) setDagbokEntries(db)
-    } catch (e) { dagbokLoadedRef.current = false }
+      const start = localDateStr(monday)
+      const endD = new Date(monday); endD.setDate(monday.getDate() + 6)
+      const end = localDateStr(endD)
+      const rows = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').gte('date', start).lte('date', end).order('date', { ascending: false }).range(from, to))
+      if (rows) setDagbokEntries(prev => mergeById(prev, rows))
+    } catch (e) { loadedDagbokWeeks.current.delete(wk) }
   }
 
   async function saveKey(key, value) {
