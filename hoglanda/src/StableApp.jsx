@@ -521,7 +521,13 @@ export default function StableApp({ session, role, onSignOut }) {
   const [bookName, setBookName] = useState('')
   const [bookType, setBookType] = useState('grön')
 
+  const logsLoadedRef = useRef(false)
+  const dagbokLoadedRef = useRef(false)
   useEffect(() => { loadAllData() }, [])
+  useEffect(() => {
+    if (tab === 'stro' || tab === 'ho' || tab === 'export') loadLogs()
+    if (tab === 'dagbok') loadDagbok()
+  }, [tab])
 
   async function loadAllData() {
     setLoadingData(true)
@@ -546,31 +552,49 @@ export default function StableApp({ session, role, onSignOut }) {
       if (row.key === 'hagarAssignments') setHagarAssignments(row.value || {})
       if (row.key === 'hagarEnabled') setHagarEnabled(!!row.value)
     })
-    let myHorses = []
     if (!isAdmin) {
       const uh = userHorsesRes.data
-      if (uh && uh.length > 0) { myHorses = uh.map(r => r.horse).sort(); setUserHorses(myHorses) }
+      if (uh && uh.length > 0) setUserHorses(uh.map(r => r.horse).sort())
       else setUserHorses(null)
     }
-    const [s, h, db] = await Promise.all([
-      fetchAllRows((from, to) => (isAdmin
-        ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
-        : supabase.from('stro_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('created_at', { ascending: false })
-      ).range(from, to)),
-      fetchAllRows((from, to) => (isAdmin
-        ? supabase.from('ho_log').select('*').order('date', { ascending: false })
-        : supabase.from('ho_log').select('*').in('horse', myHorses.length > 0 ? myHorses : ['']).order('date', { ascending: false })
-      ).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to)),
-    ])
-    if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
-    if (db) setDagbokEntries(db)
     } catch (e) {
       setLoadError(true)
     } finally {
       setLoadingData(false)
     }
+  }
+
+  function currentHorseFilter() {
+    if (isAdmin) return null
+    const mh = userHorses || []
+    return mh.length > 0 ? mh : ['']
+  }
+  async function loadLogs() {
+    if (logsLoadedRef.current) return
+    logsLoadedRef.current = true
+    try {
+      const filt = currentHorseFilter()
+      const [s, h] = await Promise.all([
+        fetchAllRows((from, to) => (isAdmin
+          ? supabase.from('stro_log').select('*').order('created_at', { ascending: false })
+          : supabase.from('stro_log').select('*').in('horse', filt).order('created_at', { ascending: false })
+        ).range(from, to)),
+        fetchAllRows((from, to) => (isAdmin
+          ? supabase.from('ho_log').select('*').order('date', { ascending: false })
+          : supabase.from('ho_log').select('*').in('horse', filt).order('date', { ascending: false })
+        ).range(from, to)),
+      ])
+      if (s) setStroLog(s.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
+      if (h) setHoLog(h.map(r => ({ id:r.id, name:r.name, item:r.item, amount:r.amount, date:r.date, user_id:r.user_id, horse:r.horse||'' })))
+    } catch (e) { logsLoadedRef.current = false }
+  }
+  async function loadDagbok() {
+    if (dagbokLoadedRef.current) return
+    dagbokLoadedRef.current = true
+    try {
+      const db = await fetchAllRows((from, to) => supabase.from('dagbok').select('*').order('date', { ascending: false }).range(from, to))
+      if (db) setDagbokEntries(db)
+    } catch (e) { dagbokLoadedRef.current = false }
   }
 
   async function saveKey(key, value) {
